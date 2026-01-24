@@ -1,0 +1,7 @@
+{
+  "name": "OVMS Mate",
+  "description": "A TeslaMate-inspired monitoring dashboard for OVMS vehicles, featuring real-time telemetry, trip history, and AI-powered efficiency analysis.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
