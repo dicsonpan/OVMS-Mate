@@ -2,11 +2,20 @@ import { GoogleGenAI } from "@google/genai";
 import { DriveSession } from "../types";
 
 const initGenAI = () => {
-  if (!process.env.API_KEY) {
-    console.warn("Gemini API Key missing");
+  // Safe access to API Key
+  let apiKey = '';
+  try {
+    // @ts-ignore
+    apiKey = import.meta.env?.VITE_API_KEY || '';
+  } catch (e) {
+    console.warn("Error accessing environment variables");
+  }
+  
+  if (!apiKey) {
+    console.warn("Gemini API Key missing (VITE_API_KEY)");
     return null;
   }
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  return new GoogleGenAI({ apiKey: apiKey });
 };
 
 export const analyzeDriveEfficiency = async (drive: DriveSession): Promise<string> => {
@@ -32,7 +41,7 @@ export const analyzeDriveEfficiency = async (drive: DriveSession): Promise<strin
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.0-flash',
       contents: prompt,
     });
     return response.text || "No analysis available.";

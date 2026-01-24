@@ -1,11 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-// In a real Vercel deployment, these are process.env.NEXT_PUBLIC_SUPABASE_URL 
-// but for this standalone environment, we check if they exist or use placeholders.
-// You MUST set these in your Vercel project settings.
+// Safe access to environment variables
+const getEnv = (key: string) => {
+  try {
+    // Check if import.meta.env exists before accessing
+    // @ts-ignore
+    return import.meta.env?.[key] || '';
+  } catch (e) {
+    return '';
+  }
+};
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = getEnv('VITE_SUPABASE_URL');
+const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY');
 
 export const supabase = (supabaseUrl && supabaseAnonKey) 
   ? createClient(supabaseUrl, supabaseAnonKey) 
