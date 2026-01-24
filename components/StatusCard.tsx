@@ -7,8 +7,13 @@ interface StatusCardProps {
 }
 
 const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
-  const isCharging = status === VehicleState.Charging;
-  const isDriving = status === VehicleState.Driving;
+  // Logic to determine vehicle state from data if passed as generic
+  const effectiveStatus = data.chargeState === 'charging' ? VehicleState.Charging 
+    : data.speed > 0 ? VehicleState.Driving 
+    : status;
+
+  const isCharging = effectiveStatus === VehicleState.Charging;
+  const isDriving = effectiveStatus === VehicleState.Driving;
 
   // Determine Battery Color
   let batteryColor = 'text-green-500';
@@ -21,16 +26,28 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
         <div>
           <h2 className="text-3xl font-bold text-white tracking-tight">BMW i3</h2>
           <p className="text-slate-400 text-sm flex items-center gap-1">
-            <span className={`w-2 h-2 rounded-full ${status === VehicleState.Offline ? 'bg-red-500' : 'bg-green-500'}`}></span>
-            {status} 
+            <span className={`w-2 h-2 rounded-full ${effectiveStatus === VehicleState.Offline ? 'bg-red-500' : 'bg-green-500'}`}></span>
+            {effectiveStatus} 
             {data.locationName && ` • ${data.locationName}`}
           </p>
+          {data.chargeState && data.chargeState !== 'stopped' && (
+             <p className="text-blue-400 text-xs mt-1 capitalize font-mono">
+               State: {data.chargeState}
+             </p>
+          )}
         </div>
         <div className="text-right">
           <div className={`text-4xl font-black ${batteryColor}`}>
             {data.soc}%
           </div>
-          <div className="text-slate-400 text-sm">{data.range} km range</div>
+          <div className="text-slate-400 text-sm">
+             {data.estRange || data.range} km <span className="text-xs text-slate-500">(Est)</span>
+          </div>
+          {data.idealRange > 0 && (
+             <div className="text-slate-500 text-xs">
+               {data.idealRange} km (Ideal)
+             </div>
+          )}
         </div>
       </div>
 
@@ -38,12 +55,17 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
         {/* Primary Metric */}
         <div className="bg-slate-700/50 p-4 rounded-xl">
           <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
-            {isCharging ? 'Charge Power' : 'Power'}
+            {isCharging ? 'Charge Power' : 'Voltage'}
           </p>
           <p className="text-2xl font-mono text-white">
-            {Math.abs(data.power).toFixed(1)} <span className="text-sm text-slate-400">kW</span>
+            {isCharging ? (data.power || (data.voltage * data.current / 1000)).toFixed(1) : data.voltage} 
+            <span className="text-sm text-slate-400">{isCharging ? 'kW' : 'V'}</span>
           </p>
-          {isCharging && <p className="text-xs text-green-400 mt-1">~2h 10m remain</p>}
+          {isCharging && (
+            <p className="text-xs text-green-400 mt-1">
+               {data.voltage}V • {data.current}A
+            </p>
+          )}
         </div>
 
         {/* Secondary Metric */}
@@ -58,14 +80,23 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
         </div>
       </div>
 
-      {/* Temperature Strip */}
+      {/* Temperature Strip (Critical for i3) */}
       <div className="mt-6 flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4">
-        <div className="flex items-center gap-2">
-          <span>🔋 {data.tempBattery}°C</span>
-          <span>⚙️ {data.tempMotor}°C</span>
+        <div className="flex items-center gap-3">
+          <div title="Battery Temp">
+            🔋 <span className={data.tempBattery > 35 ? 'text-red-400' : 'text-slate-300'}>
+              {data.tempBattery}°C
+            </span>
+          </div>
+          <div title="Motor Temp">
+            ⚙️ <span className="text-slate-300">{data.tempMotor}°C</span>
+          </div>
+          <div title="Ambient Temp">
+            🌡️ <span className="text-slate-300">{data.tempAmbient}°C</span>
+          </div>
         </div>
-        <div>
-          Last update: Just now
+        <div className="text-xs text-slate-500">
+          Live via OVMS
         </div>
       </div>
     </div>

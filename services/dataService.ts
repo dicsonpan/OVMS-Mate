@@ -4,8 +4,7 @@ import { DriveSession, ChargeSession, TelemetryData } from '../types';
 
 /**
  * Fetches the latest vehicle telemetry.
- * If Supabase is connected, fetches from the 'telemetry' table.
- * Otherwise, returns mock data.
+ * Reads from Supabase 'telemetry' table where the Logger puts data.
  */
 export const fetchLatestTelemetry = async (): Promise<TelemetryData> => {
   if (isSupabaseConfigured() && supabase) {
@@ -17,22 +16,41 @@ export const fetchLatestTelemetry = async (): Promise<TelemetryData> => {
         .limit(1)
         .single();
 
-      if (data) return data as TelemetryData;
+      if (data) {
+        return {
+           vehicleId: data.vehicle_id,
+           timestamp: data.timestamp,
+           soc: data.soc,
+           range: data.range,
+           estRange: data.est_range,
+           idealRange: data.ideal_range,
+           speed: data.speed,
+           power: data.power || 0,
+           voltage: data.voltage || 0,
+           current: data.current || 0,
+           chargeState: data.charge_state || 'stopped',
+           odometer: data.odometer,
+           tempBattery: data.temp_battery || 0,
+           tempMotor: data.temp_motor || 0,
+           tempAmbient: data.temp_ambient || 0,
+           latitude: data.latitude,
+           longitude: data.longitude,
+           elevation: 0,
+           locationName: data.location_name
+        } as TelemetryData;
+      }
     } catch (e) {
       console.warn("Failed to fetch live data from Supabase", e);
     }
   }
+  
   return getLiveTelemetry();
 };
 
-/**
- * Fetches recent drives.
- * If Supabase is connected, fetches from 'drives' table.
- */
 export const fetchDrives = async (): Promise<DriveSession[]> => {
   if (isSupabaseConfigured() && supabase) {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('drives')
         .select('*')
         .order('startDate', { ascending: false })
@@ -40,20 +58,13 @@ export const fetchDrives = async (): Promise<DriveSession[]> => {
         
       if (data) return data.map((d: any) => ({
           ...d,
-          // If path is stored as JSON in Supabase, pass it through.
-          // If stored in a separate table, we'd need a join here.
           path: d.path || [] 
       })) as DriveSession[];
-    } catch (e) {
-      console.warn("Failed to fetch drives", e);
-    }
+    } catch (e) { console.warn(e); }
   }
   return MOCK_DRIVES;
 };
 
-/**
- * Fetches recent charges.
- */
 export const fetchCharges = async (): Promise<ChargeSession[]> => {
   if (isSupabaseConfigured() && supabase) {
     try {

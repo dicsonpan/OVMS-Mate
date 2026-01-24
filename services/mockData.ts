@@ -1,4 +1,5 @@
-import { DriveSession, ChargeSession, TelemetryData, VehicleState } from '../types';
+
+import { DriveSession, ChargeSession, TelemetryData } from '../types';
 
 // Helper to generate random path
 const generatePath = (points: number) => {
@@ -88,13 +89,17 @@ export const getLiveTelemetry = (): TelemetryData => {
     timestamp: Date.now(),
     soc: 72,
     range: 184,
+    estRange: 184,
+    idealRange: 200,
     speed: 0,
     power: -0.2, // Vampire drain
     voltage: 365,
     current: 0.5,
+    chargeState: 'stopped',
     odometer: 45231,
     tempBattery: 22,
     tempMotor: 25,
+    tempAmbient: 20,
     latitude: 37.7749,
     longitude: -122.4194,
     elevation: 45,

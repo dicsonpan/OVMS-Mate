@@ -8,18 +8,23 @@ export enum VehicleState {
 export interface TelemetryData {
   timestamp: number;
   soc: number; // State of charge %
-  range: number; // Estimated range in km
+  range: number; // Display range (usually est_range)
+  estRange: number; // Estimated based on driving history
+  idealRange: number; // Rated range
   speed: number; // km/h
-  power: number; // kW (positive = discharge, negative = regen/charge)
+  power: number; // kW
   voltage: number; // V
   current: number; // A
+  chargeState: string; // 'done', 'charging', 'stopped'
   odometer: number; // km
   tempBattery: number; // Celsius
   tempMotor: number; // Celsius
+  tempAmbient: number; // Celsius
   latitude: number;
   longitude: number;
   elevation: number;
   locationName?: string;
+  vehicleId?: string;
 }
 
 export interface DriveSession {
@@ -51,4 +56,22 @@ export interface OvmsConfig {
   vehicleId: string;
   serverPassword: string;
   serverUrl: string;
+}
+
+// Raw response structure from OVMS V3 API (Status/Location)
+export interface OvmsApiData {
+  soc?: string | number;
+  range?: string | number;
+  speed?: string | number;
+  power?: string | number;
+  voltage?: string | number;
+  current?: string | number;
+  odometer?: string | number;
+  batt_temp?: string | number;
+  motor_temp?: string | number;
+  latitude?: string | number;
+  longitude?: string | number;
+  altitude?: string | number;
+  location?: string;
+  m_msgtime?: string;
 }
