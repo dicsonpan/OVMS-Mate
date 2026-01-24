@@ -62,6 +62,17 @@ const App: React.FC = () => {
     setActiveTab('map');
   };
 
+  // Generate the command for the user to run the backend
+  const getLoggerCommand = () => {
+    // Using environment variables format for Linux/Mac. 
+    // For Windows PowerShell it would be different ($env:VAR="..."), keeping standard bash for now as it's most common for servers.
+    return `export OVMS_ID="${config.vehicleId}"
+export OVMS_PASS="${config.serverPassword}"
+export OVMS_SERVER="${config.serverUrl}"
+# Ensure your Supabase keys are in your .env file or exported here too
+npm run start-logger`;
+  };
+
   // View Routing
   const renderContent = () => {
     if (!telemetry) return <div className="p-10 text-center">Loading...</div>;
@@ -147,7 +158,14 @@ const App: React.FC = () => {
             
             {/* Connection Card */}
             <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">OVMS Configuration</h3>
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <span className="bg-blue-600 w-2 h-6 rounded-full"></span>
+                OVMS Configuration
+              </h3>
+              <p className="text-sm text-slate-400 mb-6">
+                These settings are saved locally to generate your startup command.
+              </p>
+              
               <div className="space-y-4">
                 
                 {/* Vehicle ID */}
@@ -157,7 +175,7 @@ const App: React.FC = () => {
                     type="text" 
                     value={config.vehicleId}
                     onChange={(e) => setConfig({...config, vehicleId: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-600"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-600 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                     placeholder="e.g. DEMO123"
                   />
                 </div>
@@ -170,7 +188,7 @@ const App: React.FC = () => {
                       type={showPassword ? "text" : "password"}
                       value={config.serverPassword}
                       onChange={(e) => setConfig({...config, serverPassword: e.target.value})}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-600 pr-10"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-600 pr-10 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                       placeholder="••••••"
                     />
                     <button 
@@ -199,19 +217,46 @@ const App: React.FC = () => {
                     type="text" 
                     value={config.serverUrl}
                     onChange={(e) => setConfig({...config, serverUrl: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-600"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-600 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                     placeholder="api.openvehicles.com"
                   />
                 </div>
 
                 <button 
                   onClick={handleSaveConfig}
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg mt-2"
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg mt-2 transition-colors"
                 >
                   Save Local Config
                 </button>
               </div>
             </div>
+
+            {/* Run Instructions */}
+            {config.vehicleId && (
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
+                  <span className="text-green-500">▶</span>
+                  Start Data Logger
+                </h3>
+                <p className="text-sm text-slate-400 mb-4">
+                  The web app is a viewer. To collect data from your car, you must run the logger script on your server or computer.
+                </p>
+                <div className="relative group">
+                  <pre className="bg-slate-950 p-4 rounded-lg text-xs font-mono text-green-400 overflow-x-auto whitespace-pre-wrap border border-slate-800">
+                    {getLoggerCommand()}
+                  </pre>
+                  <button 
+                    onClick={() => {navigator.clipboard.writeText(getLoggerCommand()); alert("Command copied!")}}
+                    className="absolute top-2 right-2 bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  Paste this into your terminal where you cloned the project. Ensure you have installed dependencies (`npm install`).
+                </p>
+              </div>
+            )}
           </div>
         );
       default:
