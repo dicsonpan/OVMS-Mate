@@ -48,12 +48,12 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
             <h2 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
               {data.vehicleId || 'OVMS Car'}
               {data.locked !== undefined && (
-                <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                <span className={`text-xs px-2 py-0.5 rounded-full border shadow-inner transition-all duration-300 ${
                   data.locked 
-                    ? 'bg-slate-800 border-slate-600 text-slate-400' 
-                    : 'bg-red-900/20 border-red-800/50 text-red-400 animate-pulse'
+                    ? 'bg-slate-900/50 border-slate-600 text-slate-500' 
+                    : 'bg-red-500/10 border-red-500/50 text-red-400 animate-pulse font-bold'
                 }`}>
-                  {data.locked ? 'Locked' : 'Unlocked'}
+                  {data.locked ? '🔒 Locked' : '🔓 Unlocked'}
                 </span>
               )}
             </h2>

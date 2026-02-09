@@ -57,12 +57,10 @@ export const fetchLatestTelemetry = async (): Promise<TelemetryData> => {
            gear: data.gear,
            handbrake: data.handbrake,
            parkTime: data.park_time,
-           tpms: {
-             fl: data.tpms_fl,
-             fr: data.tpms_fr,
-             rl: data.tpms_rl,
-             rr: data.tpms_rr
-           },
+           // Handle i3 specifics from car_metrics if they are there
+           i3PilotCurrent: data.car_metrics?.['xi3.v.c.pilotsignal'],
+           i3LedState: data.car_metrics?.['xi3.v.c.chargeledstate'],
+           i3PlugStatus: data.car_metrics?.['xi3.v.c.chargeplugstatus'],
            rawMetrics: data.raw_metrics,
            carMetrics: data.car_metrics
         } as TelemetryData;
@@ -109,6 +107,7 @@ export const fetchCharges = async (): Promise<ChargeSession[]> => {
       if (data) return data.map((c: any) => ({
         id: c.id,
         date: c.date,
+        endDate: c.end_date,
         location: c.location,
         addedKwh: c.added_kwh || 0,
         duration: c.duration || 0,

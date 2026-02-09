@@ -63,15 +63,12 @@ export interface TelemetryData {
   valet?: boolean;
   carAwake?: boolean;
   handbrake?: boolean;
-  parkTime?: number; // Added
+  parkTime?: number;
   
-  // TPMS
-  tpms?: {
-    fl: number;
-    fr: number;
-    rl: number;
-    rr: number;
-  };
+  // BMW i3 Custom Display Fields
+  i3PilotCurrent?: number;
+  i3LedState?: number;
+  i3PlugStatus?: string;
   
   rawMetrics?: Record<string, any>;
   carMetrics?: Record<string, any>;

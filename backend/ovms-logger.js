@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import mqtt from 'mqtt';
 
 console.log('================================================');
-console.log('   OVMS MATE LOGGER - PRECISION MODE v2        ');
+console.log('   OVMS MATE LOGGER - BMW i3 SUPPORT v4        ');
 console.log('================================================');
 
 // --- CONFIGURATION ---
@@ -15,8 +15,9 @@ const CONFIG = {
   supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
   supabaseKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_KEY,
   batchInterval: 5000,
-  parkTimeoutSeconds: 1800, // 30 mins
-  minDriveDistance: 0.1, // 100m
+  parkTimeoutSeconds: 1800,
+  chargeTimeoutSeconds: 120,
+  minDriveDistance: 0.1, 
 };
 
 const supabase = (CONFIG.supabaseUrl && CONFIG.supabaseKey) 
@@ -31,6 +32,7 @@ const client = mqtt.connect(CONFIG.server.includes('://') ? CONFIG.server : `mqt
 
 // --- STATE ---
 let currentState = {
+  v_type: 'Unknown',
   soc: 0,
   soh: 100,
   voltage: 0,
@@ -43,18 +45,39 @@ let currentState = {
   gear: 'P',
   v12current: 0,
   ambient_temp: 0,
+  locked: false,
+  
+  // BMW i3 Specifics
+  i3_pilot_current: 0,
+  i3_led_state: 0,
+  i3_plug_status: 'Not connected',
+  i3_gate_temp: 0,
+
+  // Driving Session
   isDriving: false,
   currentDriveId: null,
   currentDrivePath: [],
   driveStartTime: null,
   driveStartOdo: 0,
   driveStartSoc: 0,
+
+  // Charging Session
+  isCharging: false,
+  currentChargeId: null,
+  chargeStartTime: null,
+  chargeStartSoc: 0,
+  chargeChartData: [],
+  chargeState: 'stopped',
+  chargeKwh: 0,
+  chargePower: 0,
+
   rawMetrics: {}, 
   carMetrics: {}, 
   isDirty: false
 };
 
 const DB_MAP = {
+  'v.type': 'v_type',
   'v.b.soc': 'soc',
   'v.b.soh': 'soh',
   'v.b.cac': 'cac',
@@ -66,94 +89,129 @@ const DB_MAP = {
   'v.e.on': 'isOn',
   'v.e.parktime': 'park_time',
   'v.e.temp': 'ambient_temp',
+  'v.e.locked': 'locked',
   'v.b.12v.current': 'v12current',
   'v.b.12v.voltage': 'v12voltage',
   'v.b.power': 'power',
   'v.p.latitude': 'latitude',
   'v.p.longitude': 'longitude',
-  'v.c.state': 'charge_state'
+  
+  // Standard Charging
+  'v.c.state': 'charge_state',
+  'v.c.kwh': 'charge_kwh',
+  'v.c.power': 'charge_power',
+  'v.c.temp': 'charge_head_temp',
+
+  // BMW i3 Custom Charging Metrics
+  'xi3.v.c.pilotsignal': 'i3_pilot_current',
+  'xi3.v.c.chargeledstate': 'i3_led_state',
+  'xi3.v.c.chargeplugstatus': 'i3_plug_status',
+  'xi3.v.c.temp.gatedriver': 'i3_gate_temp',
+  'xi3.v.c.chargecablecapacity': 'i3_cable_limit'
 };
 
 const parseValue = (val) => {
   if (typeof val !== 'string') return val;
-  if (val.toLowerCase() === 'yes') return true;
-  if (val.toLowerCase() === 'no') return false;
+  const lval = val.toLowerCase().trim();
+  if (lval === 'yes' || lval === 'true') return true;
+  if (lval === 'no' || lval === 'false') return false;
+  // Handle units like "16A", "28.5°C", "57.4V"
   const match = val.match(/(-?\d+(\.\d+)?)/);
   return match ? parseFloat(match[0]) : val.trim();
 };
 
 const getEffectiveCapacity = () => {
-  // 1. 如果车端直接上报了 kWh 容量
   if (currentState.capacity_kwh > 0) return currentState.capacity_kwh;
-  // 2. 如果只有 Ah (CAC)，按当前电压换算: kWh = (Ah * V) / 1000
   if (currentState.cac > 0 && currentState.voltage > 0) {
     return (currentState.cac * currentState.voltage) / 1000;
   }
-  // 3. 保底默认值 (需根据车型调整，这里设为 30 作为 fallback)
-  return 30;
+  return 33; // BMW i3 typical 94Ah is ~33kWh gross
 };
 
-const updateActiveDrive = async () => {
-  if (!currentState.isDriving || !currentState.currentDriveId || !supabase) return;
-  if (currentState.odometer === 0 || currentState.driveStartOdo === 0) return;
-
-  const currentDistance = Math.max(0, currentState.odometer - currentState.driveStartOdo);
-  const currentDuration = Math.round((new Date() - currentState.driveStartTime) / 60000);
-  const socDiff = currentState.driveStartSoc - currentState.soc;
-  
-  // 考虑 SoH 的真实可用容量
-  const realCapacity = getEffectiveCapacity() * (currentState.soh / 100);
-  const consumption = Math.max(0, (socDiff / 100) * realCapacity);
-  const efficiency = currentDistance > 0.05 ? Math.round((consumption * 1000) / currentDistance) : 0;
-
-  if (currentState.latitude !== 0) {
-    currentState.currentDrivePath.push({
-      lat: currentState.latitude, lng: currentState.longitude,
-      speed: currentState.speed, soc: currentState.soc, time: new Date().toISOString()
-    });
-    if (currentState.currentDrivePath.length > 1000) currentState.currentDrivePath.shift();
-  }
-
-  await supabase.from('drives').update({
-    distance: currentDistance, duration: currentDuration,
-    end_soc: currentState.soc, end_odometer: currentState.odometer,
-    consumption: consumption, efficiency: efficiency, path: currentState.currentDrivePath
-  }).eq('id', currentState.currentDriveId);
-};
-
+// --- LOGIC ---
 const handleStateTransitions = async () => {
-  // 判定是否正在驾驶：车辆已点火 (v.e.on) 且 (有速度 或 档位不在P)
-  const isCurrentlyDriving = currentState.isOn && (currentState.speed > 0 || (currentState.gear !== 'P' && currentState.gear !== 0));
-  const isParkedLongEnough = currentState.park_time > CONFIG.parkTimeoutSeconds;
+  if (!supabase) return;
 
-  if (isCurrentlyDriving) {
-    if (!currentState.isDriving && currentState.odometer > 0) {
-      console.log(`[Drive] Session START. Odo: ${currentState.odometer}, Ignition: ON`);
+  const isI3 = currentState.v_type === 'BMWI3' || currentState.v_type === 'RT';
+  
+  // 1. Driving Transitions
+  const isCurrentlyDriving = currentState.isOn && (currentState.speed > 0 || (currentState.gear !== 'P' && currentState.gear !== 0));
+  if (isCurrentlyDriving && !currentState.isDriving && currentState.odometer > 0) {
       currentState.isDriving = true;
       currentState.driveStartTime = new Date();
       currentState.driveStartOdo = currentState.odometer;
       currentState.driveStartSoc = currentState.soc;
       currentState.currentDrivePath = [];
-
       const { data } = await supabase.from('drives').insert({
         vehicle_id: CONFIG.vehicleId, start_date: currentState.driveStartTime.toISOString(),
         start_soc: currentState.soc, start_odometer: currentState.odometer, distance: 0, duration: 0, path: []
       }).select().single();
       if (data) currentState.currentDriveId = data.id;
+  } else if (!isCurrentlyDriving && currentState.isDriving && currentState.park_time > CONFIG.parkTimeoutSeconds) {
+      const currentDistance = currentState.odometer - currentState.driveStartOdo;
+      if (currentDistance < CONFIG.minDriveDistance) {
+         await supabase.from('drives').delete().eq('id', currentState.currentDriveId);
+      } else {
+         await supabase.from('drives').update({ end_date: new Date().toISOString() }).eq('id', currentState.currentDriveId);
+      }
+      currentState.isDriving = false;
+      currentState.currentDriveId = null;
+  }
+
+  // 2. Charging Transitions (BMW i3 Custom Logic)
+  let isCurrentlyCharging = false;
+  let currentChargePower = 0;
+
+  if (isI3) {
+    // i3: LED State > 0 AND Plugged In means charging
+    isCurrentlyCharging = currentState.i3_led_state > 0 && currentState.i3_plug_status === 'Connected';
+    // Calculate i3 Power: Pilot * 220V
+    currentChargePower = (currentState.i3_pilot_current * 220) / 1000;
+    currentState.chargePower = currentChargePower;
+  } else {
+    // Standard OVMS
+    const activeChargeStates = ['charging', 'topoff', 'prepare', 'heating'];
+    isCurrentlyCharging = activeChargeStates.includes(currentState.charge_state?.toLowerCase());
+    currentChargePower = currentState.charge_power || 0;
+  }
+
+  if (isCurrentlyCharging) {
+    if (!currentState.isCharging) {
+      console.log(`[Charge] Session START (Type: ${currentState.v_type})`);
+      currentState.isCharging = true;
+      currentState.chargeStartTime = new Date();
+      currentState.chargeStartSoc = currentState.soc;
+      currentState.chargeChartData = [];
+      const { data } = await supabase.from('charges').insert({
+        vehicle_id: CONFIG.vehicleId, date: currentState.chargeStartTime.toISOString(),
+        location: currentState.latitude ? 'Public' : 'Unknown', start_soc: currentState.soc,
+        added_kwh: 0, duration: 0, chart_data: []
+      }).select().single();
+      if (data) currentState.currentChargeId = data.id;
     } else {
-      await updateActiveDrive();
+      const duration = Math.round((new Date() - currentState.chargeStartTime) / 60000);
+      currentState.chargeChartData.push({
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        power: currentChargePower, soc: currentState.soc
+      });
+      if (currentState.chargeChartData.length > 500) currentState.chargeChartData.shift();
+
+      // Energy calculation: Power * duration (simplified since i3 doesn't have v.c.kwh)
+      // If v.c.kwh exists, use it, else calculate from power and time
+      const estimatedKwh = currentState.charge_kwh > 0 
+        ? currentState.charge_kwh 
+        : (currentChargePower * (duration / 60));
+
+      await supabase.from('charges').update({
+        added_kwh: estimatedKwh, duration: duration, end_soc: currentState.soc,
+        chart_data: currentState.chargeChartData, max_power: Math.max(0, currentChargePower)
+      }).eq('id', currentState.currentChargeId);
     }
-  } else if (currentState.isDriving && isParkedLongEnough) {
-    console.log(`[Drive] Session END. Parked for ${currentState.park_time}s.`);
-    await updateActiveDrive();
-    const finalDistance = currentState.odometer - currentState.driveStartOdo;
-    if (finalDistance < CONFIG.minDriveDistance) {
-       await supabase.from('drives').delete().eq('id', currentState.currentDriveId);
-    } else {
-       await supabase.from('drives').update({ end_date: new Date().toISOString() }).eq('id', currentState.currentDriveId);
-    }
-    currentState.isDriving = false;
-    currentState.currentDriveId = null;
+  } else if (currentState.isCharging) {
+    console.log(`[Charge] Session END.`);
+    await supabase.from('charges').update({ end_date: new Date().toISOString() }).eq('id', currentState.currentChargeId);
+    currentState.isCharging = false;
+    currentState.currentChargeId = null;
   }
 };
 
@@ -162,10 +220,8 @@ client.on('message', (topic, message) => {
   if (!metricPath) return;
   const key = metricPath.replace(/\//g, '.');
   const val = parseValue(message.toString());
-  
   const col = DB_MAP[key];
   if (col) currentState[col] = val;
-  
   if (key.startsWith('v.')) currentState.rawMetrics[key] = val;
   else currentState.carMetrics[key] = val;
   currentState.isDirty = true;
@@ -182,8 +238,11 @@ setInterval(async () => {
       odometer: currentState.odometer, voltage: currentState.voltage, 
       current_12v: currentState.v12current, voltage_12v: currentState.v12voltage,
       temp_ambient: currentState.ambient_temp, gear: currentState.gear,
-      park_time: currentState.park_time, power: currentState.power,
-      latitude: currentState.latitude, longitude: currentState.longitude
+      park_time: currentState.park_time, power: currentState.isCharging ? currentState.chargePower : currentState.power,
+      latitude: currentState.latitude, longitude: currentState.longitude,
+      locked: currentState.locked, charge_state: currentState.isCharging ? 'charging' : currentState.charge_state,
+      charge_kwh: currentState.charge_kwh,
+      temp_motor: currentState.i3_gate_temp || currentState.temp_motor // Using gate temp as motor temp proxy for dashboard
     };
     await supabase.from('telemetry').insert(payload);
     currentState.isDirty = false;
