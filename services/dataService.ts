@@ -1,3 +1,4 @@
+
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { MOCK_DRIVES, MOCK_CHARGES, getLiveTelemetry } from './mockData';
 import { DriveSession, ChargeSession, TelemetryData } from '../types';
@@ -5,7 +6,7 @@ import { DriveSession, ChargeSession, TelemetryData } from '../types';
 export const fetchLatestTelemetry = async (): Promise<TelemetryData> => {
   if (isSupabaseConfigured() && supabase) {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('telemetry')
         .select('*')
         .order('timestamp', { ascending: false })
@@ -16,27 +17,19 @@ export const fetchLatestTelemetry = async (): Promise<TelemetryData> => {
         return {
            vehicleId: data.vehicle_id,
            timestamp: data.timestamp,
-           
-           // Core
            soc: data.soc,
            soh: data.soh,
            capacity: data.capacity,
            range: data.range,
            estRange: data.est_range,
            idealRange: data.ideal_range,
-           
-           // Driving
            speed: data.speed,
            odometer: data.odometer,
-           
-           // Electrical
            power: data.power || 0,
            voltage: data.voltage || 0,
            current: data.current || 0,
            voltage12v: data.voltage_12v,
            current12v: data.current_12v,
-           
-           // Charging
            chargeState: data.charge_state || 'stopped',
            chargeMode: data.charge_mode,
            chargeKwh: data.charge_kwh,
@@ -46,15 +39,11 @@ export const fetchLatestTelemetry = async (): Promise<TelemetryData> => {
            chargeLimitSoc: data.charge_limit_soc,
            chargeLimitRange: data.charge_limit_range,
            chargeType: data.charge_type,
-           
-           // Temps
            tempBattery: data.temp_battery || 0,
            tempMotor: data.temp_motor || 0,
            tempAmbient: data.temp_ambient || 0,
            insideTemp: data.inside_temp,
            outsideTemp: data.outside_temp,
-           
-           // Location
            latitude: data.latitude,
            longitude: data.longitude,
            elevation: data.elevation || 0,
@@ -62,31 +51,24 @@ export const fetchLatestTelemetry = async (): Promise<TelemetryData> => {
            direction: data.direction,
            gpsLock: data.gps_lock,
            gpsSats: data.gps_sats,
-           
-           // Status
            locked: data.locked,
            valet: data.valet,
            carAwake: data.car_awake,
            gear: data.gear,
            handbrake: data.handbrake,
-           
-           // TPMS
+           parkTime: data.park_time,
            tpms: {
              fl: data.tpms_fl,
              fr: data.tpms_fr,
              rl: data.tpms_rl,
              rr: data.tpms_rr
            },
-           
            rawMetrics: data.raw_metrics,
            carMetrics: data.car_metrics
         } as TelemetryData;
       }
-    } catch (e) {
-      console.warn("Failed to fetch live data from Supabase", e);
-    }
+    } catch (e) { console.warn(e); }
   }
-  
   return getLiveTelemetry();
 };
 
@@ -97,15 +79,15 @@ export const fetchDrives = async (): Promise<DriveSession[]> => {
         .from('drives')
         .select('*')
         .order('start_date', { ascending: false })
-        .limit(20);
+        .limit(30);
         
       if (data) return data.map((d: any) => ({
           id: d.id,
           startDate: d.start_date,
           endDate: d.end_date,
-          distance: d.distance || 0,
+          distance: d.distance !== null ? Number(d.distance.toFixed(2)) : 0,
           duration: d.duration || 0,
-          consumption: d.consumption || 0,
+          consumption: d.consumption !== null ? Number(d.consumption.toFixed(2)) : 0,
           efficiency: d.efficiency || 0,
           startSoc: d.start_soc,
           endSoc: d.end_soc,

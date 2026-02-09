@@ -1,3 +1,4 @@
+
 export enum VehicleState {
   Parked = 'Parked',
   Driving = 'Driving',
@@ -36,9 +37,9 @@ export interface TelemetryData {
   chargeTime?: number;
   chargeTemp?: number;
   chargePilot?: boolean;
-  chargeLimitSoc?: number;    // New
-  chargeLimitRange?: number;  // New
-  chargeType?: string;        // New
+  chargeLimitSoc?: number;
+  chargeLimitRange?: number;
+  chargeType?: string;
   
   // Temps
   tempBattery: number;
@@ -62,6 +63,7 @@ export interface TelemetryData {
   valet?: boolean;
   carAwake?: boolean;
   handbrake?: boolean;
+  parkTime?: number; // Added
   
   // TPMS
   tpms?: {
@@ -71,10 +73,7 @@ export interface TelemetryData {
     rr: number;
   };
   
-  // Standard metrics not mapped to columns
   rawMetrics?: Record<string, any>;
-  
-  // Vehicle Specific (xi3.*, leaf.*)
   carMetrics?: Record<string, any>;
 }
 
@@ -88,7 +87,7 @@ export interface DriveSession {
   efficiency: number; 
   startSoc: number;
   endSoc: number;
-  path: { lat: number; lng: number; speed: number }[];
+  path: { lat: number; lng: number; speed: number; soc: number }[];
 }
 
 export interface ChargeSession {
@@ -107,11 +106,8 @@ export interface ChargeSession {
 }
 
 export interface OvmsConfig {
-  // Frontend Data Source
   supabaseUrl: string;
   supabaseKey: string;
-  
-  // Backend Generator Helpers (Optional)
   vehicleId: string;
   serverPassword?: string;
   serverUrl?: string;

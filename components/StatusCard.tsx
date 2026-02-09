@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { VehicleState, TelemetryData } from '../types';
 
@@ -7,9 +8,8 @@ interface StatusCardProps {
 }
 
 const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
-  // Enhanced Logic to determine vehicle state
   const chargingStates = ['charging', 'topoff', 'heating', 'prepare', 'timerwait'];
-  const driving = (data.speed > 0 || data.gear === 'D' || data.gear === 'R');
+  const driving = (data.speed > 0 || (data.gear !== 'P' && data.gear !== undefined && data.gear !== '0'));
 
   let effectiveStatus = status;
   if (chargingStates.includes(data.chargeState.toLowerCase())) {
@@ -25,19 +25,14 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
   const isCharging = effectiveStatus === VehicleState.Charging;
   const isDriving = effectiveStatus === VehicleState.Driving;
 
-  // Determine Battery Color
   let batteryColor = 'text-green-500';
   if (data.soc < 20) batteryColor = 'text-red-500';
   else if (data.soc < 50) batteryColor = 'text-yellow-500';
-
-  // Helper for metrics
-  const getRaw = (key: string) => data.rawMetrics ? data.rawMetrics[key] : undefined;
 
   return (
     <div className="space-y-4">
       {/* Main Status Card */}
       <div className="w-full bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-700 relative overflow-hidden transition-all duration-500">
-        {/* Background Status Indicator Stripe */}
         <div className={`absolute top-0 left-0 w-1.5 h-full transition-colors duration-500 ${
           isDriving ? 'bg-blue-500' :
           isCharging ? 'bg-green-500' : 
@@ -50,8 +45,6 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
           <div>
             <h2 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
               {data.vehicleId || 'OVMS Car'}
-              
-              {/* Lock Status */}
               {data.locked !== undefined && (
                 <span className={`text-xs px-2 py-0.5 rounded-full border ${
                   data.locked 
@@ -61,24 +54,16 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
                   {data.locked ? 'Locked' : 'Unlocked'}
                 </span>
               )}
-
-              {/* Valet / Handbrake Icons */}
-              {data.valet && <span className="text-sm" title="Valet Mode">🎩</span>}
-              {data.handbrake && <span className="text-sm text-red-500" title="Handbrake">Ⓟ</span>}
             </h2>
-            
-            {/* Status Text Line */}
             <p className="text-slate-400 text-sm flex items-center gap-2 mt-2">
               <span className={`w-2.5 h-2.5 rounded-full shadow-lg transition-colors duration-500 ${
                 effectiveStatus === VehicleState.Offline ? 'bg-red-600' : 
                 effectiveStatus === VehicleState.Asleep ? 'bg-purple-600' :
                 'bg-green-500 animate-pulse'
               }`}></span>
-              
               <span className="uppercase font-bold tracking-wider text-xs bg-slate-700/50 px-2 py-0.5 rounded">
                 {effectiveStatus}
               </span>
-              
               {data.gear && (
                 <span className={`font-mono font-bold px-1.5 rounded text-xs ${
                   data.gear === 'P' ? 'bg-slate-700 text-slate-300' :
@@ -89,93 +74,69 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
                   {data.gear}
                 </span>
               )}
-              
-              {data.locationName && (
-                <span className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap max-w-[150px]">
-                  <span className="opacity-50">•</span> {data.locationName}
+              {data.parkTime !== undefined && effectiveStatus === VehicleState.Parked && (
+                <span className="text-[10px] text-slate-500">
+                  Parked {Math.floor(data.parkTime / 3600)}h {Math.floor((data.parkTime % 3600) / 60)}m
                 </span>
               )}
             </p>
           </div>
 
-          {/* Big Battery & Range Display */}
           <div className="text-right">
             <div className={`text-5xl font-black ${batteryColor} flex items-baseline justify-end gap-1 drop-shadow-sm`}>
               {data.soc?.toFixed(0)}<span className="text-xl opacity-80">%</span>
             </div>
-            <div className="text-slate-400 text-sm font-medium mt-1 flex flex-col items-end">
-               <span>
-                 <span className="text-white font-bold">{data.estRange?.toFixed(0) || data.range?.toFixed(0)}</span> km 
-                 <span className="text-slate-600 text-xs ml-1">estimated</span>
-               </span>
-               {data.idealRange > 0 && (
-                 <span className="text-xs text-slate-600">
-                   {data.idealRange.toFixed(0)} km ideal
-                 </span>
-               )}
+            <div className="text-slate-400 text-sm font-medium mt-1">
+              <span className="text-white font-bold">{data.estRange?.toFixed(0)}</span> km 
+              <span className="text-slate-600 text-xs ml-1">est.</span>
             </div>
           </div>
         </div>
 
         {/* Primary Metrics Grid */}
         <div className="grid grid-cols-2 gap-4 pl-3">
-          {/* Power / Voltage / Charging Info */}
           <div className={`p-4 rounded-xl border backdrop-blur-sm transition-colors ${isCharging ? 'bg-green-900/10 border-green-500/20' : 'bg-slate-700/30 border-slate-700/50'}`}>
-            <p className="text-slate-400 text-[10px] uppercase tracking-wider font-bold mb-1 flex justify-between">
-              {isCharging ? 'Charging' : 'Energy'}
-              {isCharging && data.chargeType && <span className="text-green-400">{data.chargeType}</span>}
+            <p className="text-slate-400 text-[10px] uppercase tracking-wider font-bold mb-1">
+              {isCharging ? 'Charging' : 'Power'}
             </p>
-            
             <div className="flex items-baseline gap-2">
               <span className={`text-2xl font-mono font-bold ${isCharging ? 'text-green-400' : 'text-white'}`}>
                 {data.power?.toFixed(1) || '0.0'}
               </span>
               <span className="text-sm text-slate-500">kW</span>
             </div>
-            
             <div className="text-xs text-slate-500 mt-2 font-mono flex justify-between items-center">
               <span>{data.voltage?.toFixed(0)}V</span>
               <span className="h-3 w-px bg-slate-700"></span>
               <span>{data.current?.toFixed(1)}A</span>
             </div>
-
-            {isCharging && data.chargeLimitSoc && (
-              <div className="mt-2 pt-2 border-t border-slate-700/50 text-[10px] text-slate-400 flex justify-between">
-                <span>Limit: {data.chargeLimitSoc}%</span>
-                {data.chargeTime && <span>{Math.round(data.chargeTime / 60)}m elapsed</span>}
-              </div>
-            )}
           </div>
 
-          {/* Speed / Odometer / 12V */}
           <div className="bg-slate-700/30 p-4 rounded-xl border border-slate-700/50 backdrop-blur-sm">
             <p className="text-slate-400 text-[10px] uppercase tracking-wider font-bold mb-1">
               {isDriving ? 'Speed' : 'Odometer'}
             </p>
-            
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-mono text-white font-bold">
                  {isDriving ? data.speed?.toFixed(0) : (data.odometer ? Math.round(data.odometer) : '0')} 
               </span>
               <span className="text-sm text-slate-500">{isDriving ? 'km/h' : 'km'}</span>
             </div>
-
              <div className="mt-2 pt-2 border-t border-slate-700/50 flex justify-between items-center text-xs">
-                {data.voltage12v ? (
-                   <div className="flex items-center gap-1" title="12V Battery">
-                     <span className="text-[10px]">🔋 12V</span>
-                     <span className={`font-mono ${data.voltage12v < 12.0 ? 'text-red-400' : 'text-slate-300'}`}>
+                {data.voltage12v !== undefined ? (
+                   <div className="flex items-center gap-2" title="12V System">
+                     <span className="text-[10px] bg-slate-800 px-1 rounded">12V</span>
+                     <span className={`font-mono ${data.voltage12v < 12.0 ? 'text-red-400' : 'text-blue-300'}`}>
                        {data.voltage12v.toFixed(1)}V
                      </span>
+                     {data.current12v !== undefined && (
+                       <span className={`font-mono text-[10px] ${data.current12v < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                         {data.current12v > 0 ? '+' : ''}{data.current12v.toFixed(1)}A
+                       </span>
+                     )}
                    </div>
                 ) : (
                   <span className="text-[10px] text-slate-600">--</span>
-                )}
-                
-                {data.soh && (
-                   <div className="text-[10px] text-slate-500" title="State of Health">
-                     SoH: {data.soh}%
-                   </div>
                 )}
              </div>
           </div>
@@ -190,9 +151,14 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
              <h3 className="text-xs uppercase text-slate-400 font-bold flex items-center gap-2">
                <span>🌡️</span> Temperatures
              </h3>
-             {data.outsideTemp !== undefined && (
-               <span className="text-sm text-white font-bold">{data.outsideTemp}°C <span className="text-slate-500 text-xs font-normal">Out</span></span>
-             )}
+             <div className="flex items-center gap-3">
+               {data.tempAmbient !== undefined && (
+                 <span className="text-xs text-slate-300 font-medium">Amb: <span className="text-white font-bold">{data.tempAmbient.toFixed(1)}°</span></span>
+               )}
+               {data.outsideTemp !== undefined && (
+                 <span className="text-xs text-slate-300 font-medium">Out: <span className="text-white font-bold">{data.outsideTemp.toFixed(1)}°</span></span>
+               )}
+             </div>
            </div>
            
            <div className="grid grid-cols-3 gap-2 text-center">
@@ -213,38 +179,33 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
            </div>
         </div>
 
-        {/* GPS & TPMS Combined */}
+        {/* GPS & SoH Status */}
         <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-sm">
            <h3 className="text-xs uppercase text-slate-400 font-bold mb-3 flex items-center justify-between">
-             <span className="flex items-center gap-2"><span>🏎️</span> Status</span>
-             {data.elevation !== undefined && <span className="text-[10px] font-normal text-slate-500">Alt: {data.elevation.toFixed(0)}m</span>}
+             <span className="flex items-center gap-2"><span>🏎️</span> System Health</span>
+             {data.soh !== undefined && <span className="text-[10px] text-green-400">Battery SoH: {data.soh}%</span>}
            </h3>
            
-           {data.tpms ? (
-             <div className="flex justify-between gap-1 text-center">
-               {['FL', 'FR', 'RL', 'RR'].map((tire) => {
-                 const key = `tpms_${tire.toLowerCase()}` as any; 
-                 // Mapping hack because TS types are strict
-                 const val = (data.tpms as any)[tire.toLowerCase()];
-                 return (
-                   <div key={tire} className="bg-slate-900/50 rounded p-1.5 flex-1">
-                      <div className="text-[9px] text-slate-500 mb-0.5">{tire}</div>
-                      <div className={`font-mono font-bold text-xs ${val < 2.2 ? 'text-yellow-400' : 'text-blue-200'}`}>
-                        {val?.toFixed(1) || '-'}
-                      </div>
-                   </div>
-                 );
-               })}
-             </div>
-           ) : (
-             <div className="flex items-center justify-between h-12 px-2 text-xs text-slate-500">
-                <div className="flex items-center gap-2">
-                  <span>📡 GPS:</span>
-                  <span className={data.gpsLock ? 'text-green-400' : 'text-red-400'}>{data.gpsLock ? 'Locked' : 'Searching'}</span>
+           <div className="flex items-center justify-between h-12 px-2 text-xs">
+              <div className="flex items-center gap-4">
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[9px] uppercase">GPS Status</span>
+                  <span className={data.gpsLock ? 'text-green-400' : 'text-red-400 font-bold'}>
+                    {data.gpsLock ? 'Locked' : 'Searching...'}
+                  </span>
                 </div>
-                <div>{data.gpsSats || 0} Sats</div>
-             </div>
-           )}
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[9px] uppercase">Satellites</span>
+                  <span className="text-white font-mono">{data.gpsSats || 0}</span>
+                </div>
+              </div>
+              {data.elevation !== undefined && (
+                <div className="flex flex-col items-end">
+                   <span className="text-slate-500 text-[9px] uppercase">Elevation</span>
+                   <span className="text-white font-mono">{data.elevation.toFixed(0)}m</span>
+                </div>
+              )}
+           </div>
         </div>
       </div>
     </div>
