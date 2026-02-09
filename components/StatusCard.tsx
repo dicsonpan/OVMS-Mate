@@ -8,11 +8,13 @@ interface StatusCardProps {
 }
 
 const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
+  if (!data) return null;
+
   const chargingStates = ['charging', 'topoff', 'heating', 'prepare', 'timerwait'];
   const driving = (data.speed > 0 || (data.gear !== 'P' && data.gear !== undefined && data.gear !== '0'));
 
   let effectiveStatus = status;
-  if (chargingStates.includes(data.chargeState.toLowerCase())) {
+  if (data.chargeState && chargingStates.includes(data.chargeState.toLowerCase())) {
     effectiveStatus = VehicleState.Charging;
   } else if (driving) {
     effectiveStatus = VehicleState.Driving;
@@ -74,7 +76,7 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
                   {data.gear}
                 </span>
               )}
-              {data.parkTime !== undefined && effectiveStatus === VehicleState.Parked && (
+              {data.parkTime != null && effectiveStatus === VehicleState.Parked && (
                 <span className="text-[10px] text-slate-500">
                   Parked {Math.floor(data.parkTime / 3600)}h {Math.floor((data.parkTime % 3600) / 60)}m
                 </span>
@@ -84,10 +86,10 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
 
           <div className="text-right">
             <div className={`text-5xl font-black ${batteryColor} flex items-baseline justify-end gap-1 drop-shadow-sm`}>
-              {data.soc?.toFixed(0)}<span className="text-xl opacity-80">%</span>
+              {data.soc != null ? data.soc.toFixed(0) : '--'}<span className="text-xl opacity-80">%</span>
             </div>
             <div className="text-slate-400 text-sm font-medium mt-1">
-              <span className="text-white font-bold">{data.estRange?.toFixed(0)}</span> km 
+              <span className="text-white font-bold">{data.estRange != null ? data.estRange.toFixed(0) : '--'}</span> km 
               <span className="text-slate-600 text-xs ml-1">est.</span>
             </div>
           </div>
@@ -101,14 +103,14 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
             </p>
             <div className="flex items-baseline gap-2">
               <span className={`text-2xl font-mono font-bold ${isCharging ? 'text-green-400' : 'text-white'}`}>
-                {data.power?.toFixed(1) || '0.0'}
+                {data.power != null ? data.power.toFixed(1) : '0.0'}
               </span>
               <span className="text-sm text-slate-500">kW</span>
             </div>
             <div className="text-xs text-slate-500 mt-2 font-mono flex justify-between items-center">
-              <span>{data.voltage?.toFixed(0)}V</span>
+              <span>{data.voltage != null ? data.voltage.toFixed(0) : '--'}V</span>
               <span className="h-3 w-px bg-slate-700"></span>
-              <span>{data.current?.toFixed(1)}A</span>
+              <span>{data.current != null ? data.current.toFixed(1) : '--'}A</span>
             </div>
           </div>
 
@@ -118,25 +120,25 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
             </p>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-mono text-white font-bold">
-                 {isDriving ? data.speed?.toFixed(0) : (data.odometer ? Math.round(data.odometer) : '0')} 
+                 {isDriving ? (data.speed != null ? data.speed.toFixed(0) : '0') : (data.odometer != null ? Math.round(data.odometer) : '0')} 
               </span>
               <span className="text-sm text-slate-500">{isDriving ? 'km/h' : 'km'}</span>
             </div>
              <div className="mt-2 pt-2 border-t border-slate-700/50 flex justify-between items-center text-xs">
-                {data.voltage12v !== undefined ? (
+                {data.voltage12v != null ? (
                    <div className="flex items-center gap-2" title="12V System">
                      <span className="text-[10px] bg-slate-800 px-1 rounded">12V</span>
                      <span className={`font-mono ${data.voltage12v < 12.0 ? 'text-red-400' : 'text-blue-300'}`}>
                        {data.voltage12v.toFixed(1)}V
                      </span>
-                     {data.current12v !== undefined && (
+                     {data.current12v != null && (
                        <span className={`font-mono text-[10px] ${data.current12v < 0 ? 'text-red-400' : 'text-green-400'}`}>
                          {data.current12v > 0 ? '+' : ''}{data.current12v.toFixed(1)}A
                        </span>
                      )}
                    </div>
                 ) : (
-                  <span className="text-[10px] text-slate-600">--</span>
+                  <span className="text-[10px] text-slate-600">12V --</span>
                 )}
              </div>
           </div>
@@ -152,10 +154,10 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
                <span>🌡️</span> Temperatures
              </h3>
              <div className="flex items-center gap-3">
-               {data.tempAmbient !== undefined && (
+               {data.tempAmbient != null && (
                  <span className="text-xs text-slate-300 font-medium">Amb: <span className="text-white font-bold">{data.tempAmbient.toFixed(1)}°</span></span>
                )}
-               {data.outsideTemp !== undefined && (
+               {data.outsideTemp != null && (
                  <span className="text-xs text-slate-300 font-medium">Out: <span className="text-white font-bold">{data.outsideTemp.toFixed(1)}°</span></span>
                )}
              </div>
@@ -164,17 +166,17 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
            <div className="grid grid-cols-3 gap-2 text-center">
               <div className="bg-slate-900/50 rounded-lg p-2">
                 <div className="text-[10px] text-slate-500 mb-1">Inside</div>
-                <div className="text-white font-mono font-medium">{data.insideTemp?.toFixed(1) ?? '--'}°</div>
+                <div className="text-white font-mono font-medium">{data.insideTemp != null ? data.insideTemp.toFixed(1) : '--'}°</div>
               </div>
               <div className="bg-slate-900/50 rounded-lg p-2">
                 <div className="text-[10px] text-slate-500 mb-1">Battery</div>
-                <div className={`${(data.tempBattery > 35 || data.tempBattery < 5) ? 'text-yellow-400' : 'text-blue-200'} font-mono font-medium`}>
-                  {data.tempBattery?.toFixed(1) ?? '--'}°
+                <div className={`${(data.tempBattery != null && (data.tempBattery > 35 || data.tempBattery < 5)) ? 'text-yellow-400' : 'text-blue-200'} font-mono font-medium`}>
+                  {data.tempBattery != null ? data.tempBattery.toFixed(1) : '--'}°
                 </div>
               </div>
               <div className="bg-slate-900/50 rounded-lg p-2">
                 <div className="text-[10px] text-slate-500 mb-1">Motor</div>
-                <div className="text-slate-300 font-mono font-medium">{data.tempMotor?.toFixed(1) ?? '--'}°</div>
+                <div className="text-slate-300 font-mono font-medium">{data.tempMotor != null ? data.tempMotor.toFixed(1) : '--'}°</div>
               </div>
            </div>
         </div>
@@ -183,7 +185,7 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
         <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-sm">
            <h3 className="text-xs uppercase text-slate-400 font-bold mb-3 flex items-center justify-between">
              <span className="flex items-center gap-2"><span>🏎️</span> System Health</span>
-             {data.soh !== undefined && <span className="text-[10px] text-green-400">Battery SoH: {data.soh}%</span>}
+             {data.soh != null && <span className="text-[10px] text-green-400">Battery SoH: {data.soh}%</span>}
            </h3>
            
            <div className="flex items-center justify-between h-12 px-2 text-xs">
@@ -199,7 +201,7 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
                   <span className="text-white font-mono">{data.gpsSats || 0}</span>
                 </div>
               </div>
-              {data.elevation !== undefined && (
+              {data.elevation != null && (
                 <div className="flex flex-col items-end">
                    <span className="text-slate-500 text-[9px] uppercase">Elevation</span>
                    <span className="text-white font-mono">{data.elevation.toFixed(0)}m</span>

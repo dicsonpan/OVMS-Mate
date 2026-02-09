@@ -66,15 +66,15 @@ const DriveList: React.FC<DriveListProps> = ({ drives, onViewMap }) => {
           <div className="flex gap-4 mb-4">
              <div className="flex-1 bg-slate-900/40 rounded-lg p-2 text-center border border-slate-700/30">
                 <div className="text-[10px] text-slate-500 uppercase">Distance</div>
-                <div className="text-sm font-bold text-white">{drive.distance.toFixed(1)} <span className="text-[10px] font-normal">km</span></div>
+                <div className="text-sm font-bold text-white">{(drive.distance || 0).toFixed(1)} <span className="text-[10px] font-normal">km</span></div>
              </div>
              <div className="flex-1 bg-slate-900/40 rounded-lg p-2 text-center border border-slate-700/30">
                 <div className="text-[10px] text-slate-500 uppercase">Duration</div>
-                <div className="text-sm font-bold text-white">{drive.duration} <span className="text-[10px] font-normal">min</span></div>
+                <div className="text-sm font-bold text-white">{drive.duration || 0} <span className="text-[10px] font-normal">min</span></div>
              </div>
              <div className="flex-1 bg-slate-900/40 rounded-lg p-2 text-center border border-slate-700/30">
                 <div className="text-[10px] text-slate-500 uppercase">Energy</div>
-                <div className="text-sm font-bold text-white">{drive.consumption.toFixed(2)} <span className="text-[10px] font-normal">kWh</span></div>
+                <div className="text-sm font-bold text-white">{(drive.consumption || 0).toFixed(2)} <span className="text-[10px] font-normal">kWh</span></div>
              </div>
           </div>
 
