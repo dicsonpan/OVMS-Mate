@@ -14,6 +14,7 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
   const driving = (data.speed > 0 || (data.gear !== 'P' && data.gear !== undefined && data.gear !== '0'));
 
   let effectiveStatus = status;
+  // If database says charging or i3 specifics indicate charging
   if (data.chargeState && chargingStates.includes(data.chargeState.toLowerCase())) {
     effectiveStatus = VehicleState.Charging;
   } else if (driving) {

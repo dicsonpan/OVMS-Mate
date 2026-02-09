@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import mqtt from 'mqtt';
 
 console.log('================================================');
-console.log('   OVMS MATE LOGGER - BMW i3 PRECISION v5      ');
+console.log('   OVMS MATE LOGGER - BMW i3 PRECISION v7      ');
 console.log('================================================');
 
 // --- CONFIGURATION ---
@@ -15,7 +15,7 @@ const CONFIG = {
   supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
   supabaseKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_KEY,
   batchInterval: 5000,
-  parkTimeoutSeconds: 1200, // 20 mins
+  parkTimeoutSeconds: 1200, 
   chargeTimeoutSeconds: 120,
   minDriveDistance: 0.1, 
 };
@@ -56,7 +56,15 @@ let currentState = {
   i3_gate_temp: 0,
   i3_ready: false,
 
-  // Driving Session
+  // GPS/Env
+  elevation: 0,
+  gps_sats: 0,
+  latitude: 0,
+  longitude: 0,
+  direction: 0,
+  gps_lock: false,
+
+  // Sessions
   isDriving: false,
   currentDriveId: null,
   currentDrivePath: [],
@@ -64,7 +72,6 @@ let currentState = {
   driveStartOdo: 0,
   driveStartSoc: 0,
 
-  // Charging Session
   isCharging: false,
   currentChargeId: null,
   chargeStartTime: null,
@@ -92,7 +99,15 @@ const DB_MAP = {
   'v.e.parktime': 'park_time',
   'v.e.locked': 'locked',
   
-  // Temperature Mappings
+  // GPS & Env requested mappings
+  'v.p.altitude': 'elevation',
+  'v.p.satcount': 'gps_sats',
+  'v.p.latitude': 'latitude',
+  'v.p.longitude': 'longitude',
+  'v.p.direction': 'direction',
+  'v.p.gpslock': 'gps_lock',
+
+  // Temperature Mappings requested
   'v.e.temp': 'temp_ambient',
   'v.b.temp': 'temp_battery',
   'v.m.temp': 'temp_motor',
@@ -101,16 +116,14 @@ const DB_MAP = {
   'v.b.12v.current': 'v12current',
   'v.b.12v.voltage': 'v12voltage',
   'v.b.power': 'power',
-  'v.p.latitude': 'latitude',
-  'v.p.longitude': 'longitude',
   
-  // Standard Charging (might be empty for i3)
+  // Standard Charging
   'v.c.state': 'charge_state',
   'v.c.kwh': 'charge_kwh',
   'v.c.power': 'charge_power',
   'v.c.temp': 'chargeHeadTemp',
 
-  // BMW i3 Specific Charging Metrics
+  // BMW i3 Custom Metrics
   'xi3.v.c.pilotsignal': 'i3_pilot_current',
   'xi3.v.c.chargeledstate': 'i3_led_state',
   'xi3.v.c.chargeplugstatus': 'i3_plug_status',
@@ -127,13 +140,12 @@ const parseValue = (val) => {
   return match ? parseFloat(match[0]) : val.trim();
 };
 
-// --- LOGIC ---
 const handleStateTransitions = async () => {
   if (!supabase) return;
 
   const isI3 = currentState.v_type === 'BMWI3' || currentState.v_type === 'RT';
   
-  // 1. Driving Transitions
+  // 1. Driving
   const isCurrentlyDriving = currentState.isOn && (currentState.speed > 0 || (currentState.gear !== 'P' && currentState.gear !== 0));
   if (isCurrentlyDriving && !currentState.isDriving && currentState.odometer > 0) {
       currentState.isDriving = true;
@@ -157,18 +169,16 @@ const handleStateTransitions = async () => {
       currentState.currentDriveId = null;
   }
 
-  // 2. Charging Transitions (Enhanced for i3)
+  // 2. Charging (i3 Final Logic: Pilot > 0 and Connected)
   let isCurrentlyCharging = false;
   let currentChargePower = 0;
 
   if (isI3) {
-    // i3 Logic: LED > 0 (usually 3 or blue) and Plug is Connected
-    isCurrentlyCharging = (currentState.i3_led_state > 0) && (currentState.i3_plug_status === 'Connected');
-    // Calculate power: Pilot Current (A) * 220V / 1000 = kW
+    // Logic: xi3.v.c.pilotsignal > 0 AND xi3.v.c.chargeplugstatus === 'Connected'
+    isCurrentlyCharging = (currentState.i3_pilot_current > 0) && (currentState.i3_plug_status === 'Connected');
     currentChargePower = (currentState.i3_pilot_current * 220) / 1000;
     currentState.chargePower = currentChargePower;
   } else {
-    // Standard OVMS
     const activeStates = ['charging', 'topoff', 'prepare', 'heating'];
     isCurrentlyCharging = activeStates.includes(currentState.charge_state?.toLowerCase());
     currentChargePower = currentState.charge_power || 0;
@@ -176,7 +186,7 @@ const handleStateTransitions = async () => {
 
   if (isCurrentlyCharging) {
     if (!currentState.isCharging) {
-      console.log(`[Charge] Session START (Type: ${currentState.v_type}) Power: ${currentChargePower.toFixed(2)}kW`);
+      console.log(`[Charge] Session START (i3 Mode: ${isI3}) Power: ${currentChargePower.toFixed(2)}kW`);
       currentState.isCharging = true;
       currentState.chargeStartTime = new Date();
       currentState.chargeStartSoc = currentState.soc;
@@ -195,7 +205,6 @@ const handleStateTransitions = async () => {
       });
       if (currentState.chargeChartData.length > 500) currentState.chargeChartData.shift();
 
-      // Energy calculation for i3 (integrate power over time)
       const estimatedAddedKwh = currentState.charge_kwh > 0 
         ? currentState.charge_kwh 
         : (currentChargePower * (duration / 60));
@@ -242,6 +251,8 @@ setInterval(async () => {
       gear: currentState.gear, park_time: currentState.park_time, 
       power: currentState.isCharging ? currentState.chargePower : (currentState.power || 0),
       latitude: currentState.latitude, longitude: currentState.longitude,
+      elevation: currentState.elevation, direction: currentState.direction,
+      gps_lock: currentState.gps_lock, gps_sats: currentState.gps_sats,
       locked: currentState.locked, 
       charge_state: currentState.isCharging ? 'charging' : (currentState.charge_state || 'stopped'),
       charge_kwh: currentState.charge_kwh,

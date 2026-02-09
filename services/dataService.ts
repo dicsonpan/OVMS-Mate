@@ -46,11 +46,11 @@ export const fetchLatestTelemetry = async (): Promise<TelemetryData> => {
            outsideTemp: data.outside_temp,
            latitude: data.latitude,
            longitude: data.longitude,
-           elevation: data.elevation || 0,
+           elevation: data.elevation || 0, // From v.p.altitude in DB
            locationName: data.location_name,
            direction: data.direction,
            gpsLock: data.gps_lock,
-           gpsSats: data.gps_sats,
+           gpsSats: data.gps_sats, // From v.p.satcount in DB
            locked: data.locked,
            valet: data.valet,
            carAwake: data.car_awake,
