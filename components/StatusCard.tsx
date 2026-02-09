@@ -107,11 +107,19 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
               </span>
               <span className="text-sm text-slate-500">kW</span>
             </div>
-            <div className="text-xs text-slate-500 mt-2 font-mono flex justify-between items-center">
-              <span>{data.voltage != null ? data.voltage.toFixed(0) : '--'}V</span>
-              <span className="h-3 w-px bg-slate-700"></span>
-              <span>{data.current != null ? data.current.toFixed(1) : '--'}A</span>
-            </div>
+            {isCharging && data.i3PilotCurrent ? (
+               <div className="text-[10px] text-slate-500 mt-2 font-mono flex justify-between items-center">
+                 <span>Input: {data.i3PilotCurrent.toFixed(1)}A</span>
+                 <span className="h-3 w-px bg-slate-700"></span>
+                 <span>Ready: {data.i3Ready ? 'YES' : 'NO'}</span>
+               </div>
+            ) : (
+              <div className="text-xs text-slate-500 mt-2 font-mono flex justify-between items-center">
+                <span>{data.voltage != null ? data.voltage.toFixed(0) : '--'}V</span>
+                <span className="h-3 w-px bg-slate-700"></span>
+                <span>{data.current != null ? data.current.toFixed(1) : '--'}A</span>
+              </div>
+            )}
           </div>
 
           <div className="bg-slate-700/30 p-4 rounded-xl border border-slate-700/50 backdrop-blur-sm">
@@ -157,8 +165,8 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
                {data.tempAmbient != null && (
                  <span className="text-xs text-slate-300 font-medium">Amb: <span className="text-white font-bold">{data.tempAmbient.toFixed(1)}°</span></span>
                )}
-               {data.outsideTemp != null && (
-                 <span className="text-xs text-slate-300 font-medium">Out: <span className="text-white font-bold">{data.outsideTemp.toFixed(1)}°</span></span>
+               {data.chargeTemp != null && (
+                 <span className="text-[10px] text-slate-500">Charger: {data.chargeTemp.toFixed(1)}°</span>
                )}
              </div>
            </div>

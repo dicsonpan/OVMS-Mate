@@ -69,6 +69,7 @@ export interface TelemetryData {
   i3PilotCurrent?: number;
   i3LedState?: number;
   i3PlugStatus?: string;
+  i3Ready?: boolean;
   
   rawMetrics?: Record<string, any>;
   carMetrics?: Record<string, any>;
