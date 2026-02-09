@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import mqtt from 'mqtt';
 
 console.log('================================================');
-console.log('   OVMS MATE LOGGER - DEBUG EDITION            ');
+console.log('   OVMS MATE LOGGER - FULL DATA MODE           ');
 console.log('================================================');
 
 // --- CONFIGURATION ---
@@ -208,6 +208,7 @@ const handleStateTransitions = async () => {
       await supabase.from('charges').update({
         end_date: new Date().toISOString(),
         end_soc: currentState.soc,
+        end_odometer: currentState.odometer,
         added_kwh: currentState.charge_kwh || 0
       }).eq('id', currentState.currentChargeId);
       currentState.currentChargeId = null;
@@ -221,7 +222,7 @@ client.on('connect', () => {
   console.log('[MQTT] ✅ Connected to broker!');
   const topic = `ovms/${CONFIG.mqttUser}/${CONFIG.vehicleId}/metric/#`; 
   client.subscribe(topic, (err) => {
-    if (!err) console.log(`[MQTT] Subscribed to ${topic}`);
+    if (!err) console.log(`[MQTT] Subscribed to ALL metrics: ${topic}`);
     else console.error(`[MQTT] Subscription failed:`, err);
   });
 });
@@ -249,10 +250,12 @@ client.on('message', (topic, message) => {
       currentState.rawMetrics[normalizedKey] = value;
     }
   } else {
+    // any key not starting with v. (like xi3. or leaf.)
     currentState.carMetrics[normalizedKey] = value;
   }
   
   currentState.isDirty = true;
+  msgCount++;
 });
 
 // --- SYNC LOOP ---
@@ -277,12 +280,20 @@ setInterval(async () => {
   
   if (error) {
       console.error('[Supabase] ❌ Insert Error:', error.message);
-      // Helpful hint for the specific error user was facing
       if (error.message.includes("Could not find the") && error.message.includes("column")) {
           console.error("   💡 HINT: Database schema mismatch. Please run 'fix_db_schema.sql' in Supabase SQL Editor.");
       }
   } else {
-      console.log(`[Sync] 💾 Saved. Speed:${currentState.speed} SoC:${currentState.soc}%`);
+      // Improved logging to reassure user that ALL data is being saved
+      const mappedCount = Object.keys(payload).length - 4; // exclude ID, TS, and JSON blobs
+      const rawCount = Object.keys(currentState.rawMetrics).length;
+      const carCount = Object.keys(currentState.carMetrics).length;
+      
+      console.log(`[Sync] 💾 Saved Full Telemetry Snapshot:`);
+      console.log(`       → Mapped Columns: ${mappedCount} (Speed, SoC, Voltage, TPMS...)`);
+      console.log(`       → Raw Metrics:    ${rawCount} items`);
+      console.log(`       → Car Specific:   ${carCount} items`);
+      console.log(`       → Summary:        Speed:${currentState.speed}km/h | SoC:${currentState.soc}% | Odo:${currentState.odometer}km`);
   }
   
   currentState.isDirty = false;

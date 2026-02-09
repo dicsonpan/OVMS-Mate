@@ -12,8 +12,8 @@ export interface TelemetryData {
   
   // Core
   soc: number; 
-  soh?: number; // New
-  capacity?: number; // New
+  soh?: number; 
+  capacity?: number; 
   range: number; 
   estRange: number; 
   idealRange: number;
@@ -26,8 +26,8 @@ export interface TelemetryData {
   power: number; 
   voltage: number; 
   current: number; 
-  voltage12v?: number; // New
-  current12v?: number; // New
+  voltage12v?: number; 
+  current12v?: number; 
   
   // Charging
   chargeState: string; 
@@ -36,6 +36,9 @@ export interface TelemetryData {
   chargeTime?: number;
   chargeTemp?: number;
   chargePilot?: boolean;
+  chargeLimitSoc?: number;    // New
+  chargeLimitRange?: number;  // New
+  chargeType?: string;        // New
   
   // Temps
   tempBattery: number;

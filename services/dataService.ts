@@ -43,6 +43,9 @@ export const fetchLatestTelemetry = async (): Promise<TelemetryData> => {
            chargeTime: data.charge_time,
            chargeTemp: data.charge_temp,
            chargePilot: data.charge_pilot,
+           chargeLimitSoc: data.charge_limit_soc,
+           chargeLimitRange: data.charge_limit_range,
+           chargeType: data.charge_type,
            
            // Temps
            tempBattery: data.temp_battery || 0,
