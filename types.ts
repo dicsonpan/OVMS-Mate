@@ -107,7 +107,12 @@ export interface ChargeSession {
 }
 
 export interface OvmsConfig {
+  // Frontend Data Source
+  supabaseUrl: string;
+  supabaseKey: string;
+  
+  // Backend Generator Helpers (Optional)
   vehicleId: string;
-  serverPassword: string;
-  serverUrl: string;
+  serverPassword?: string;
+  serverUrl?: string;
 }

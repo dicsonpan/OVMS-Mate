@@ -1,9 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Safe access to environment variables
 const getEnv = (key: string) => {
   try {
-    // Check if import.meta.env exists before accessing
     // @ts-ignore
     return import.meta.env?.[key] || '';
   } catch (e) {
@@ -11,11 +10,31 @@ const getEnv = (key: string) => {
   }
 };
 
-const supabaseUrl = getEnv('VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY');
+const getClient = (): SupabaseClient | null => {
+  // 1. Try to load from LocalStorage (User Settings)
+  try {
+    const savedConfigStr = localStorage.getItem('ovms_config');
+    if (savedConfigStr) {
+      const config = JSON.parse(savedConfigStr);
+      if (config.supabaseUrl && config.supabaseKey) {
+        return createClient(config.supabaseUrl, config.supabaseKey);
+      }
+    }
+  } catch (e) {
+    console.error("Error reading config from localStorage", e);
+  }
 
-export const supabase = (supabaseUrl && supabaseAnonKey) 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
-  : null;
+  // 2. Fallback to Environment Variables
+  const envUrl = getEnv('VITE_SUPABASE_URL');
+  const envKey = getEnv('VITE_SUPABASE_ANON_KEY');
+
+  if (envUrl && envKey) {
+    return createClient(envUrl, envKey);
+  }
+
+  return null;
+};
+
+export const supabase = getClient();
 
 export const isSupabaseConfigured = () => !!supabase;
