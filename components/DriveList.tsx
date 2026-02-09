@@ -21,6 +21,14 @@ const DriveList: React.FC<DriveListProps> = ({ drives, onViewMap }) => {
     setAnalyzingId(null);
   };
 
+  const isLive = (drive: DriveSession) => {
+    if (drive.endDate) return false;
+    // If started more than 2 hours ago and no end date, it's likely a stale/orphaned record
+    const startTime = new Date(drive.startDate).getTime();
+    const now = Date.now();
+    return (now - startTime) < 7200000; // 2 hours threshold for LIVE
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-end px-1">
@@ -41,7 +49,7 @@ const DriveList: React.FC<DriveListProps> = ({ drives, onViewMap }) => {
             <div>
               <div className="text-lg font-bold text-white flex items-center gap-2">
                 {new Date(drive.startDate).toLocaleDateString()} 
-                {!drive.endDate && (
+                {isLive(drive) && (
                    <span className="bg-blue-500 text-[10px] px-1.5 py-0.5 rounded text-white animate-pulse uppercase">Live</span>
                 )}
               </div>
@@ -99,7 +107,7 @@ const DriveList: React.FC<DriveListProps> = ({ drives, onViewMap }) => {
               </ResponsiveContainer>
             ) : (
               <div className="h-full flex items-center justify-center text-[10px] text-slate-600 italic">
-                Capturing trajectory...
+                {isLive(drive) ? 'Capturing trajectory...' : 'No trajectory data'}
               </div>
             )}
           </div>
@@ -118,7 +126,7 @@ const DriveList: React.FC<DriveListProps> = ({ drives, onViewMap }) => {
             
             <button 
               onClick={() => handleAnalyze(drive)}
-              disabled={analyzingId === drive.id || !drive.endDate}
+              disabled={analyzingId === drive.id || isLive(drive)}
               className="flex items-center gap-1.5 bg-indigo-600/80 hover:bg-indigo-600 text-white text-[10px] font-bold px-3 py-1.5 rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             >
               {analyzingId === drive.id ? (
