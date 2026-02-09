@@ -155,9 +155,9 @@ const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
             
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-mono text-white font-bold">
-                 {isDriving ? data.speed?.toFixed(0) : (data.odometer / 1000).toFixed(1)} 
+                 {isDriving ? data.speed?.toFixed(0) : (data.odometer ? Math.round(data.odometer) : '0')} 
               </span>
-              <span className="text-sm text-slate-500">{isDriving ? 'km/h' : 'k km'}</span>
+              <span className="text-sm text-slate-500">{isDriving ? 'km/h' : 'km'}</span>
             </div>
 
              <div className="mt-2 pt-2 border-t border-slate-700/50 flex justify-between items-center text-xs">
