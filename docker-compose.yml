@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  ovms-logger:
+    build: .
+    container_name: ovms-mate-logger
+    restart: always
+    environment:
+      # OVMS Custom Broker Configuration
+      - OVMS_ID=${OVMS_ID}
+      # Password for your custom MQTT broker
+      - OVMS_PASS=${OVMS_PASS}
+      # Your Custom Broker Address and Port
+      - OVMS_SERVER=${OVMS_SERVER}
+      
+      # Supabase Credentials
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    volumes:
+      # Mount backend code for hot-reloading/updates
+      - ./backend:/app/backend
+    # Load .env file automatically if present
+    env_file:
+      - .env

@@ -1,252 +1,305 @@
-import net from 'net';
-import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import mqtt from 'mqtt';
 
-/**
- * OVMS V2 Protocol Logger - BMW i3 Adapter
- * 
- * Acts as an "Interactive User App" connecting to OVMS Server.
- * Implements V2 TCP/RC4 Protocol.
- * 
- * Supported Messages:
- * - MP-S (Handshake)
- * - MP-0 S (Status): SoC, Range, Temps, Charge State
- * - MP-0 L (Location): GPS, Speed, Odometer
- */
+console.log('================================================');
+console.log('   OVMS MATE LOGGER - TESLAMATE EDITION        ');
+console.log('================================================');
 
-// Configuration
+// --- CONFIGURATION ---
+// 敏感数据必须通过环境变量传入，不再保留硬编码默认值
 const CONFIG = {
-  vehicleId: process.env.OVMS_ID || 'DEMO_CAR',
-  password: process.env.OVMS_PASS || 'DEMO_PASS',
-  server: process.env.OVMS_SERVER || 'api.openvehicles.com',
-  port: 6867,
+  mqttUser: process.env.OVMS_USER || process.env.OVMS_ID,
+  vehicleId: process.env.OVMS_ID,
+  password: process.env.OVMS_PASS,
+  server: process.env.OVMS_SERVER, 
   supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
-  supabaseKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_KEY
+  supabaseKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_KEY,
+  // Throttling: How often to write to DB (ms)
+  batchInterval: 5000 
 };
 
+// 检查必要配置
+if (!CONFIG.vehicleId || !CONFIG.server) {
+  console.error("❌ ERROR: Missing required environment variables.");
+  console.error("Please set OVMS_ID and OVMS_SERVER in your .env file or environment.");
+  process.exit(1);
+}
+
+// Construct Broker URL
+let serverInput = CONFIG.server;
+let mqttUrl = serverInput.includes('://') ? serverInput : `mqtt://${serverInput}`;
+if (!mqttUrl.split('://')[1].includes(':')) mqttUrl = `${mqttUrl}:1883`;
+
+console.log(`[Config] User: ${CONFIG.mqttUser} | Car: ${CONFIG.vehicleId}`);
+console.log(`[Config] Broker: ${mqttUrl}`);
+
+// --- SUPABASE SETUP ---
 const supabase = (CONFIG.supabaseUrl && CONFIG.supabaseKey) 
   ? createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey) 
   : null;
 
-class RC4 {
-  constructor(key) {
-    this.s = new Array(256);
-    this.i = 0;
-    this.j = 0;
-    for (let i = 0; i < 256; i++) this.s[i] = i;
-    let j = 0;
-    for (let i = 0; i < 256; i++) {
-      j = (j + this.s[i] + key[i % key.length]) % 256;
-      [this.s[i], this.s[j]] = [this.s[j], this.s[i]];
+if (!supabase) console.warn("[Warn] Supabase keys missing. Data will not be saved.");
+
+// --- MQTT SETUP ---
+const client = mqtt.connect(mqttUrl, {
+  username: CONFIG.mqttUser,
+  password: CONFIG.password,
+  clientId: `ovms-mate-${Math.random().toString(16).substr(2, 8)}`,
+  clean: true,
+  reconnectPeriod: 5000,
+});
+
+// --- STATE MANAGEMENT ---
+// We keep a local copy of the full vehicle state to detect changes
+let currentState = {
+  // Core
+  soc: 0,
+  range: 0,
+  speed: 0,
+  odometer: 0,
+  charge_state: 'stopped',
+  latitude: 0,
+  longitude: 0,
+  // Derived
+  isDriving: false,
+  isCharging: false,
+  // Session IDs
+  currentDriveId: null,
+  currentChargeId: null,
+  // Buffer for metrics
+  rawMetrics: {}, // v.* that are not mapped to columns
+  carMetrics: {}, // xi3.*, leaf.*, etc. (Vehicle specific)
+  // Flags
+  isDirty: false,
+  lastDbWrite: 0
+};
+
+// --- METRIC MAPPING ---
+// Map OVMS metrics (v.* only) to our flat DB columns. 
+// Keys are the DOT notation of the topic suffix (e.g. v/b/soc -> v.b.soc)
+const DB_MAP = {
+  // Battery & Range
+  'v.b.soc': 'soc',
+  'v.b.soh': 'soh',
+  'v.b.capacity': 'capacity',
+  'v.b.range.est': 'est_range',
+  'v.b.range.ideal': 'ideal_range',
+  'v.b.range.full': 'ideal_range', // Fallback
+  
+  // Electrical
+  'v.b.voltage': 'voltage',
+  'v.b.current': 'current',
+  'v.b.power': 'power',
+  'v.b.12v.voltage': 'voltage_12v',
+  'v.b.12v.current': 'current_12v',
+  
+  // Charging
+  'v.c.state': 'charge_state',
+  'v.c.mode': 'charge_mode',
+  'v.c.kwh': 'charge_kwh',
+  'v.c.time': 'charge_time',
+  'v.c.temp': 'charge_temp',
+  'v.c.pilot': 'charge_pilot',
+  'v.c.limit.soc': 'charge_limit_soc',
+  'v.c.limit.range': 'charge_limit_range',
+  'v.c.type': 'charge_type',
+  
+  // Driving & Location
+  'v.p.speed': 'speed',
+  'v.p.odometer': 'odometer',
+  'v.p.latitude': 'latitude',
+  'v.p.longitude': 'longitude',
+  'v.p.altitude': 'elevation',
+  'v.p.location': 'location_name',
+  'v.p.direction': 'direction',
+  'v.p.gpslock': 'gps_lock',
+  'v.p.satcount': 'gps_sats',
+  
+  // Temperatures
+  'v.b.temp': 'temp_battery',
+  'v.m.temp': 'temp_motor',
+  'v.e.temp': 'temp_ambient',     // Ambient temp usually
+  'v.e.cabintemp': 'inside_temp',
+  'v.e.temp.outside': 'outside_temp', // Sometimes available
+  
+  // Status
+  'v.e.locked': 'locked',
+  'v.e.valet': 'valet',
+  'v.e.awake': 'car_awake',
+  'v.e.gear': 'gear',
+  'v.e.handbrake': 'handbrake',
+  
+  // TPMS (Scalar values)
+  'v.tp.fl.p': 'tpms_fl',
+  'v.tp.fr.p': 'tpms_fr',
+  'v.tp.rl.p': 'tpms_rl',
+  'v.tp.rr.p': 'tpms_rr',
+};
+
+// Helper: Parse OVMS values (remove units, handle bools, trim)
+const parseValue = (val) => {
+  if (typeof val !== 'string') return val;
+  const lower = val.toLowerCase().trim();
+  
+  if (lower === 'yes' || lower === 'true') return true;
+  if (lower === 'no' || lower === 'false') return false;
+  
+  // Remove common units to check if it's a number
+  // e.g. "12.5 V" -> "12.5", "100 km" -> "100"
+  // Regex looks for a number at the start, optionally followed by units
+  const match = lower.match(/^(-?\d+(\.\d+)?)/);
+  if (match) {
+    const num = parseFloat(match[0]);
+    if (!isNaN(num)) return num;
+  }
+  
+  return val.trim(); // Return as string if not a simple boolean or number
+};
+
+// --- LOGIC: SESSION MANAGEMENT ---
+const handleStateTransitions = async () => {
+  const isDrivingNow = currentState.speed > 0 || currentState.gear === 'D' || currentState.gear === 'R';
+  const isChargingNow = currentState.charge_state === 'charging' || currentState.charge_state === 'top-off';
+  
+  // 1. DRIVE START
+  if (isDrivingNow && !currentState.isDriving) {
+    console.log('[Session] Drive STARTED');
+    currentState.isDriving = true;
+    if (supabase) {
+      const { data } = await supabase.from('drives').insert({
+        vehicle_id: CONFIG.vehicleId,
+        start_date: new Date().toISOString(),
+        start_soc: currentState.soc,
+        start_odometer: currentState.odometer,
+        path: [] 
+      }).select().single();
+      if (data) currentState.currentDriveId = data.id;
     }
-    // Discard first 1024 bytes as per OVMS spec
-    this.process(Buffer.alloc(1024));
   }
-
-  process(buffer) {
-    const output = Buffer.alloc(buffer.length);
-    for (let k = 0; k < buffer.length; k++) {
-      this.i = (this.i + 1) % 256;
-      this.j = (this.j + this.s[this.i]) % 256;
-      [this.s[this.i], this.s[this.j]] = [this.s[this.j], this.s[this.i]];
-      const K = this.s[(this.s[this.i] + this.s[this.j]) % 256];
-      output[k] = buffer[k] ^ K;
-    }
-    return output;
-  }
-}
-
-class OvmsClient {
-  constructor() {
-    this.socket = null;
-    this.state = 'DISCONNECTED';
-    this.rxCipher = null;
-    this.txCipher = null;
-    this.buffer = '';
-    this.lastPing = 0;
-    this.pingInterval = null;
-  }
-
-  connect() {
-    console.log(`[OVMS] Connecting to ${CONFIG.server}:${CONFIG.port} for ${CONFIG.vehicleId}...`);
-    this.socket = new net.Socket();
-    
-    this.socket.connect(CONFIG.port, CONFIG.server, () => {
-      console.log('[OVMS] TCP Connected. Waiting for handshake...');
-      this.state = 'HANDSHAKE';
-    });
-
-    this.socket.on('data', (data) => this.handleData(data));
-    this.socket.on('close', () => this.handleClose());
-    this.socket.on('error', (err) => console.error('[OVMS] Socket Error:', err.message));
-  }
-
-  handleClose() {
-    console.log('[OVMS] Connection closed. Reconnecting in 5s...');
-    if (this.pingInterval) clearInterval(this.pingInterval);
-    setTimeout(() => this.connect(), 5000);
-  }
-
-  handleData(raw) {
-    let data = raw;
-    if (this.state === 'ENCRYPTED' && this.rxCipher) {
-      data = this.rxCipher.process(raw);
-    }
-    const text = data.toString('utf8');
-    this.buffer += text;
-
-    let lineEnd;
-    while ((lineEnd = this.buffer.indexOf('\r\n')) > -1) {
-      const line = this.buffer.substring(0, lineEnd);
-      this.buffer = this.buffer.substring(lineEnd + 2);
-      this.processMessage(line);
-    }
-  }
-
-  processMessage(msg) {
-    if (msg.startsWith('MP-S')) {
-      this.handleHandshake(msg);
-    } else if (msg.startsWith('MP-0')) {
-      this.handleV2Message(msg);
-    }
-    // Ping response is usually silent or just an echo, we handle 'A' logic if needed
-  }
-
-  handleHandshake(msg) {
-    const parts = msg.split(' ');
-    const token = parts[2];
-    const serverCipher = parts[3];
-
-    // Session Key: HMAC-MD5(password, token)
-    const sessionKey = crypto.createHmac('md5', CONFIG.password).update(token).digest();
-    // Client Token
-    const clientToken = crypto.randomBytes(4).toString('base64');
-    // Digest
-    const digest = crypto.createHmac('md5', sessionKey).update(clientToken).digest('base64');
-
-    const response = `MP-C ${clientToken} ${digest}`;
-    this.socket.write(response + '\r\n');
-
-    const rxKey = crypto.createHmac('md5', sessionKey).update("Server").digest();
-    const txKey = crypto.createHmac('md5', sessionKey).update("Client").digest();
-
-    this.rxCipher = new RC4(rxKey);
-    this.txCipher = new RC4(txKey);
-
-    this.state = 'ENCRYPTED';
-    console.log('[OVMS] Handshake complete. Encrypted.');
-
-    // Start Ping (Heartbeat) every 60s to keep connection alive as an "Interactive App"
-    this.pingInterval = setInterval(() => {
-      if (this.socket && this.state === 'ENCRYPTED') {
-        const ping = this.txCipher.process(Buffer.from('MP-0 A\r\n'));
-        this.socket.write(ping);
-      }
-    }, 60000);
-  }
-
-  handleV2Message(msg) {
-    // Msg: MP-0 <Type><Data>
-    const payload = msg.substring(5); 
-    const type = payload.charAt(0);
-    const content = payload.substring(1);
-    
-    // Parse CSV properly handling potential quotes (simplified for OVMS standard)
-    const values = content.split(',').map(v => v.trim());
-
-    const telemetry = {};
-
-    switch(type) {
-      case 'S': // Status Record
-        // Index Mapping for V2 (BMW i3 matches standard V2 layout mostly)
-        // 0: SoC (%)
-        // 1: Units (K/M)
-        // 2: Line Voltage (V)
-        // 3: Charge Current (A)
-        // 4: Charge State (Done, Stopped, Charging, Top-off)
-        // 5: Charge Mode (Standard, Range, Performance)
-        // 6: Ideal Range
-        // 7: Est Range
-        // 8: Charge Time (min)
-        // 9: Charge kWh
-        // 10: Car Temp (Ambient)
-        // 11: Battery Temp
-        // 12: Motor Temp
-        
-        console.log('[OVMS] Status Update:', content);
-        
-        telemetry.soc = parseFloat(values[0]);
-        telemetry.voltage = parseFloat(values[2]);
-        telemetry.current = parseFloat(values[3]);
-        telemetry.charge_state = values[4]; // text
-        telemetry.ideal_range = parseFloat(values[6]);
-        telemetry.est_range = parseFloat(values[7]);
-        telemetry.range = telemetry.est_range; // Default to est for display
-        
-        telemetry.temp_ambient = parseFloat(values[10]);
-        telemetry.temp_battery = parseFloat(values[11]);
-        telemetry.temp_motor = parseFloat(values[12]);
-
-        this.saveTelemetry(telemetry);
-        break;
-
-      case 'L': // Location Record
-        // 0: Lat, 1: Lng, 2: Direction, 3: Altitude, 4: GPS Lock, 5: Stale
-        // 6: Speed, 7: Trip Meter, 8: Drive Mode, 9: Energy Used, 10: Energy Recd
-        
-        console.log('[OVMS] Location Update:', content);
-        
-        telemetry.latitude = parseFloat(values[0]);
-        telemetry.longitude = parseFloat(values[1]);
-        telemetry.speed = parseFloat(values[6]);
-        telemetry.odometer = parseFloat(values[7]); // V2 often puts Odometer in Trip or separate
-        // Note: For i3, "Trip" in V2 might be the Odometer if configured, 
-        // or we need to look at specific metrics. We'll assume field 7 is useful odometer for now.
-        
-        this.saveTelemetry(telemetry);
-        break;
-        
-      case 'D': 
-        // Power/Energy often here.
-        // i3 might send power in Watts or kW.
-        break;
+  
+  // 2. DRIVE END
+  if (!isDrivingNow && currentState.isDriving) {
+    console.log('[Session] Drive ENDED');
+    currentState.isDriving = false;
+    if (currentState.currentDriveId && supabase) {
+      await supabase.from('drives').update({
+        end_date: new Date().toISOString(),
+        end_soc: currentState.soc,
+        end_odometer: currentState.odometer,
+        distance: currentState.odometer - (currentState.rawMetrics['v.p.odometer'] || currentState.odometer) // Approximation
+      }).eq('id', currentState.currentDriveId);
+      currentState.currentDriveId = null;
     }
   }
 
-  async saveTelemetry(data) {
-    if (!supabase) return;
-
-    // Map internal keys to DB columns
-    // We filter out NaNs
-    const cleanFloat = (v) => isNaN(v) ? undefined : v;
-    
-    const record = {
-      vehicle_id: CONFIG.vehicleId,
-      timestamp: Date.now(),
-      soc: cleanFloat(data.soc),
-      range: cleanFloat(data.range),
-      est_range: cleanFloat(data.est_range),
-      ideal_range: cleanFloat(data.ideal_range),
-      speed: cleanFloat(data.speed),
-      power: cleanFloat(data.power),
-      voltage: cleanFloat(data.voltage),
-      current: cleanFloat(data.current),
-      charge_state: data.charge_state,
-      odometer: cleanFloat(data.odometer),
-      temp_battery: cleanFloat(data.temp_battery),
-      temp_motor: cleanFloat(data.temp_motor),
-      temp_ambient: cleanFloat(data.temp_ambient),
-      latitude: cleanFloat(data.latitude),
-      longitude: cleanFloat(data.longitude)
-    };
-
-    // Remove keys with undefined values to avoid DB null errors if column exists
-    Object.keys(record).forEach(key => record[key] === undefined && delete record[key]);
-
-    const { error } = await supabase.from('telemetry').insert(record);
-    if (error) console.error('[Supabase] Insert Error:', error.message);
+  // 3. CHARGE START
+  if (isChargingNow && !currentState.isCharging) {
+    console.log('[Session] Charge STARTED');
+    currentState.isCharging = true;
+    if (supabase) {
+      const { data } = await supabase.from('charges').insert({
+        vehicle_id: CONFIG.vehicleId,
+        date: new Date().toISOString(),
+        start_soc: currentState.soc,
+        location: currentState.location_name || 'Unknown',
+        chart_data: []
+      }).select().single();
+      if (data) currentState.currentChargeId = data.id;
+    }
   }
-}
 
-const client = new OvmsClient();
-client.connect();
+  // 4. CHARGE END
+  if (!isChargingNow && currentState.isCharging) {
+    console.log('[Session] Charge ENDED');
+    currentState.isCharging = false;
+    if (currentState.currentChargeId && supabase) {
+      await supabase.from('charges').update({
+        end_date: new Date().toISOString(),
+        end_soc: currentState.soc,
+        added_kwh: currentState.charge_kwh || 0
+      }).eq('id', currentState.currentChargeId);
+      currentState.currentChargeId = null;
+    }
+  }
+};
+
+// --- MQTT EVENTS ---
+
+client.on('connect', () => {
+  console.log('[MQTT] ✅ Connected!');
+  // Subscribe to ALL metrics except client notifications (m)
+  const topic = `ovms/${CONFIG.mqttUser}/${CONFIG.vehicleId}/metric/#`; 
+  client.subscribe(topic, (err) => {
+    if (!err) console.log(`[MQTT] Subscribed to ${topic}`);
+  });
+});
+
+client.on('message', (topic, message) => {
+  const parts = topic.split('/metric/');
+  if (parts.length < 2) return;
+  
+  const metricPath = parts[1]; // e.g., "v/b/soc" or "xi3/v/b/soc"
+  
+  // Filter out unwanted metrics (e.g. m.* messages)
+  if (metricPath.startsWith('m/')) return;
+
+  const rawValue = message.toString();
+  const value = parseValue(rawValue);
+  
+  // Normalize key to dots: "v/b/soc" -> "v.b.soc"
+  const normalizedKey = metricPath.replace(/\//g, '.');
+  
+  // --- SEPARATION LOGIC ---
+  if (normalizedKey.startsWith('v.')) {
+    // 1. Public / Standard Metrics (v.*)
+    const dbCol = DB_MAP[normalizedKey];
+    if (dbCol) {
+      // It maps to a top-level column in 'telemetry' table
+      currentState[dbCol] = value;
+    } else {
+      // It's a standard metric but we don't have a column for it -> raw_metrics
+      currentState.rawMetrics[normalizedKey] = value;
+    }
+  } else {
+    // 2. Vehicle Specific Metrics (xi3.*, leaf.*, etc.)
+    // These always go to 'car_metrics' JSONB column
+    currentState.carMetrics[normalizedKey] = value;
+  }
+  
+  currentState.isDirty = true;
+});
+
+// --- SYNC LOOP ---
+setInterval(async () => {
+  if (!currentState.isDirty) return;
+  if (!supabase) return;
+
+  // 1. Process Logic
+  await handleStateTransitions();
+
+  // 2. Prepare Payload
+  const payload = {
+    vehicle_id: CONFIG.vehicleId,
+    timestamp: Date.now(),
+    raw_metrics: currentState.rawMetrics,
+    car_metrics: currentState.carMetrics
+  };
+  
+  // Add mapped columns if they exist in state
+  Object.values(DB_MAP).forEach(col => {
+    if (currentState[col] !== undefined) payload[col] = currentState[col];
+  });
+  
+  // 3. Write to Telemetry
+  const { error } = await supabase.from('telemetry').insert(payload);
+  
+  if (error) console.error('[Supabase] Insert Error:', error.message);
+  else console.log(`[Sync] 💾 Saved. Speed:${currentState.speed} SoC:${currentState.soc}% 12V:${currentState.voltage_12v}`);
+  
+  currentState.isDirty = false;
+  currentState.lastDbWrite = Date.now();
+
+}, CONFIG.batchInterval);
+
+// Keep alive
+process.stdin.resume();

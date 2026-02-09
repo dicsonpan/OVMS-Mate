@@ -22,7 +22,7 @@ const App: React.FC = () => {
   const [config, setConfig] = useState<OvmsConfig>({
     vehicleId: '',
     serverPassword: '',
-    serverUrl: 'api.openvehicles.com'
+    serverUrl: 'huashi.sparkminds.io:18830'
   });
   const [showPassword, setShowPassword] = useState(false);
 
@@ -64,8 +64,6 @@ const App: React.FC = () => {
 
   // Generate the command for the user to run the backend
   const getLoggerCommand = () => {
-    // Using environment variables format for Linux/Mac. 
-    // For Windows PowerShell it would be different ($env:VAR="..."), keeping standard bash for now as it's most common for servers.
     return `export OVMS_ID="${config.vehicleId}"
 export OVMS_PASS="${config.serverPassword}"
 export OVMS_SERVER="${config.serverUrl}"
@@ -159,67 +157,52 @@ npm run start-logger`;
             {/* Connection Card */}
             <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
               <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <span className="bg-blue-600 w-2 h-6 rounded-full"></span>
-                OVMS Configuration
+                <span className="bg-indigo-600 w-2 h-6 rounded-full"></span>
+                Custom Broker Configuration
               </h3>
-              <p className="text-sm text-slate-400 mb-6">
-                These settings are saved locally to generate your startup command.
-              </p>
               
               <div className="space-y-4">
-                
+                {/* Server URL */}
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Server URL (Host:Port)</label>
+                  <input 
+                    type="text" 
+                    value={config.serverUrl}
+                    onChange={(e) => setConfig({...config, serverUrl: e.target.value})}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-600 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    placeholder="huashi.sparkminds.io:18830"
+                  />
+                </div>
+
                 {/* Vehicle ID */}
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Vehicle ID</label>
+                  <label className="block text-sm text-slate-400 mb-1">Vehicle ID / User</label>
                   <input 
                     type="text" 
                     value={config.vehicleId}
                     onChange={(e) => setConfig({...config, vehicleId: e.target.value})}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-600 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                    placeholder="e.g. DEMO123"
                   />
                 </div>
 
                 {/* Server Password */}
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Server Password</label>
+                  <label className="block text-sm text-slate-400 mb-1">MQTT Password</label>
                   <div className="relative">
                     <input 
                       type={showPassword ? "text" : "password"}
                       value={config.serverPassword}
                       onChange={(e) => setConfig({...config, serverPassword: e.target.value})}
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-600 pr-10 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                      placeholder="••••••"
                     />
                     <button 
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-3 text-slate-400 hover:text-white"
                     >
-                      {showPassword ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                        </svg>
-                      ) : (
-                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                      )}
+                      {showPassword ? "Hide" : "Show"}
                     </button>
                   </div>
-                </div>
-
-                {/* Server URL */}
-                <div>
-                  <label className="block text-sm text-slate-400 mb-1">Server URL</label>
-                  <input 
-                    type="text" 
-                    value={config.serverUrl}
-                    onChange={(e) => setConfig({...config, serverUrl: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-600 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                    placeholder="api.openvehicles.com"
-                  />
                 </div>
 
                 <button 
@@ -231,16 +214,33 @@ npm run start-logger`;
               </div>
             </div>
 
-            {/* Run Instructions */}
+            {/* OVMS Car Configuration Guide */}
+            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+               <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-yellow-400">
+                <span className="text-xl">⚠️</span>
+                Configure Your Car
+              </h3>
+              <p className="text-sm text-slate-300 mb-4 leading-relaxed">
+                Since you are using a custom broker, you must tell your OVMS module to send data to your server instead of the official one.
+              </p>
+              
+              <div className="bg-black/40 rounded p-4 text-xs font-mono text-slate-300 space-y-2 border border-slate-700">
+                <p className="text-slate-500"># SSH into your OVMS module or use Web Shell:</p>
+                <p className="text-green-400">config set mqtt server {config.serverUrl.split(':')[0]}</p>
+                <p className="text-green-400">config set mqtt port {config.serverUrl.split(':')[1] || '1883'}</p>
+                <p className="text-green-400">config set mqtt user {config.vehicleId}</p>
+                <p className="text-green-400">config set mqtt password {config.serverPassword}</p>
+                <p className="text-green-400">mqtt reconnect</p>
+              </div>
+            </div>
+
+            {/* Logger Command */}
             {config.vehicleId && (
               <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
                 <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
                   <span className="text-green-500">▶</span>
                   Start Data Logger
                 </h3>
-                <p className="text-sm text-slate-400 mb-4">
-                  The web app is a viewer. To collect data from your car, you must run the logger script on your server or computer.
-                </p>
                 <div className="relative group">
                   <pre className="bg-slate-950 p-4 rounded-lg text-xs font-mono text-green-400 overflow-x-auto whitespace-pre-wrap border border-slate-800">
                     {getLoggerCommand()}
@@ -252,9 +252,6 @@ npm run start-logger`;
                     Copy
                   </button>
                 </div>
-                <p className="text-xs text-slate-500 mt-2">
-                  Paste this into your terminal where you cloned the project. Ensure you have installed dependencies (`npm install`).
-                </p>
               </div>
             )}
           </div>

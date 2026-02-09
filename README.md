@@ -1,20 +1,31 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# OVMS Mate
 
-# Run and deploy your AI Studio app
+A TeslaMate-inspired monitoring dashboard for OVMS vehicles.
 
-This contains everything you need to run your app locally.
+## Architecture
 
-View your app in AI Studio: https://ai.studio/apps/drive/1nRyQFd-VX81i-pmlycszmOMr1_3jNBRz
+*   **Frontend**: React App (Deployed on Vercel)
+*   **Backend**: Node.js TCP Logger (Deployed via Docker)
+*   **Database**: Supabase (PostgreSQL)
 
-## Run Locally
+## How to Deploy
 
-**Prerequisites:**  Node.js
+### 1. Frontend (Vercel)
+Connect this repository to Vercel. Add your Supabase Environment variables in the Vercel Dashboard.
 
+### 2. Backend Logger (Docker)
+The logger must run 24/7 to collect data.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+**Option A: Run with Docker Compose (Recommended for VPS/NAS)**
+1. Edit `docker-compose.yml` and fill in your `OVMS_` and `SUPABASE_` credentials.
+2. Run:
+   ```bash
+   docker-compose up -d
+   ```
+
+**Option B: Run locally (for testing)**
+1. Fill in credentials in `.env` (create one based on the variables in docker-compose).
+2. Run:
+   ```bash
+   npm run start-logger
+   ```

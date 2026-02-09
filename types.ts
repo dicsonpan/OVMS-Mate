@@ -2,53 +2,104 @@ export enum VehicleState {
   Parked = 'Parked',
   Driving = 'Driving',
   Charging = 'Charging',
-  Offline = 'Offline'
+  Offline = 'Offline',
+  Asleep = 'Asleep'
 }
 
 export interface TelemetryData {
+  vehicleId?: string;
   timestamp: number;
-  soc: number; // State of charge %
-  range: number; // Display range (usually est_range)
-  estRange: number; // Estimated based on driving history
-  idealRange: number; // Rated range
-  speed: number; // km/h
-  power: number; // kW
-  voltage: number; // V
-  current: number; // A
-  chargeState: string; // 'done', 'charging', 'stopped'
-  odometer: number; // km
-  tempBattery: number; // Celsius
-  tempMotor: number; // Celsius
-  tempAmbient: number; // Celsius
+  
+  // Core
+  soc: number; 
+  soh?: number; // New
+  capacity?: number; // New
+  range: number; 
+  estRange: number; 
+  idealRange: number;
+  
+  // Driving
+  speed: number; 
+  odometer: number; 
+  
+  // Electrical
+  power: number; 
+  voltage: number; 
+  current: number; 
+  voltage12v?: number; // New
+  current12v?: number; // New
+  
+  // Charging
+  chargeState: string; 
+  chargeMode?: string;
+  chargeKwh?: number;
+  chargeTime?: number;
+  chargeTemp?: number;
+  chargePilot?: boolean;
+  
+  // Temps
+  tempBattery: number;
+  tempMotor: number;
+  tempAmbient: number;
+  insideTemp?: number;
+  outsideTemp?: number;
+  
+  // Location
   latitude: number;
   longitude: number;
   elevation: number;
   locationName?: string;
-  vehicleId?: string;
+  direction?: number;
+  gpsLock?: boolean;
+  gpsSats?: number;
+  
+  // Status
+  gear?: string;
+  locked?: boolean;
+  valet?: boolean;
+  carAwake?: boolean;
+  handbrake?: boolean;
+  
+  // TPMS
+  tpms?: {
+    fl: number;
+    fr: number;
+    rl: number;
+    rr: number;
+  };
+  
+  // Standard metrics not mapped to columns
+  rawMetrics?: Record<string, any>;
+  
+  // Vehicle Specific (xi3.*, leaf.*)
+  carMetrics?: Record<string, any>;
 }
 
 export interface DriveSession {
   id: string;
   startDate: string;
-  endDate: string;
-  distance: number; // km
-  duration: number; // minutes
-  consumption: number; // kWh
-  efficiency: number; // Wh/km
+  endDate?: string;
+  distance: number; 
+  duration: number; 
+  consumption: number; 
+  efficiency: number; 
   startSoc: number;
   endSoc: number;
-  path: { lat: number; lng: number; speed: number }[]; // Simplified path for visualization
+  path: { lat: number; lng: number; speed: number }[];
 }
 
 export interface ChargeSession {
   id: string;
   date: string;
+  endDate?: string;
   location: string;
   addedKwh: number;
-  duration: number; // minutes
+  duration: number; 
   cost?: number;
-  avgPower: number; // kW
-  maxPower: number; // kW
+  avgPower: number; 
+  maxPower: number; 
+  startSoc?: number;
+  endSoc?: number;
   chartData: { time: string; power: number; soc: number }[];
 }
 
@@ -56,22 +107,4 @@ export interface OvmsConfig {
   vehicleId: string;
   serverPassword: string;
   serverUrl: string;
-}
-
-// Raw response structure from OVMS V3 API (Status/Location)
-export interface OvmsApiData {
-  soc?: string | number;
-  range?: string | number;
-  speed?: string | number;
-  power?: string | number;
-  voltage?: string | number;
-  current?: string | number;
-  odometer?: string | number;
-  batt_temp?: string | number;
-  motor_temp?: string | number;
-  latitude?: string | number;
-  longitude?: string | number;
-  altitude?: string | number;
-  location?: string;
-  m_msgtime?: string;
 }

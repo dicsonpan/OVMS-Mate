@@ -1,26 +1,16 @@
 import { GoogleGenAI } from "@google/genai";
 import { DriveSession } from "../types";
 
-const initGenAI = () => {
-  // Safe access to API Key
-  let apiKey = '';
-  try {
-    // @ts-ignore
-    apiKey = import.meta.env?.VITE_API_KEY || '';
-  } catch (e) {
-    console.warn("Error accessing environment variables");
-  }
+export const analyzeDriveEfficiency = async (drive: DriveSession): Promise<string> => {
+  // @ts-ignore
+  const apiKey = process.env.API_KEY;
   
   if (!apiKey) {
-    console.warn("Gemini API Key missing (VITE_API_KEY)");
-    return null;
+    console.warn("Gemini API Key missing (process.env.API_KEY)");
+    return "API Key not configured. Unable to analyze.";
   }
-  return new GoogleGenAI({ apiKey: apiKey });
-};
 
-export const analyzeDriveEfficiency = async (drive: DriveSession): Promise<string> => {
-  const ai = initGenAI();
-  if (!ai) return "API Key not configured. Unable to analyze.";
+  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
     Analyze this EV drive session for efficiency improvements.
@@ -41,7 +31,7 @@ export const analyzeDriveEfficiency = async (drive: DriveSession): Promise<strin
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
     });
     return response.text || "No analysis available.";
