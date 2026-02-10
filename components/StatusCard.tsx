@@ -45,11 +45,6 @@ const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
     { label: 'Trunk', val: data.doorTrunk, icon: '📦' },
   ].filter(s => s.val !== undefined && (s.label === 'Locked' || s.val === true));
 
-  // 4. Trip Calculations
-  // Calculate Avg Speed based on Trip Distance / Trip Duration (converted to hours)
-  const tripDurationHours = data.driveTime / 3600;
-  const avgSpeed = tripDurationHours > 0.01 ? (data.tripDistance / tripDurationHours) : data.speed;
-
   return (
     <div className="space-y-4">
       {/* MAIN CARD: Vehicle Name, Status, SOC, Odometer, Range */}
@@ -179,42 +174,28 @@ const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
         </div>
       </div>
 
-      {/* TRIP COMPUTER INFO */}
+      {/* TRIP COMPUTER INFO - COMPACT ROW */}
       <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
-        <h3 className="text-xs font-black text-slate-500 uppercase mb-4 flex items-center gap-2">
+        <h3 className="text-xs font-black text-slate-500 uppercase mb-3 flex items-center gap-2">
           <span className="w-1.5 h-3 bg-blue-500 rounded-full"></span> Trip Computer Info
         </h3>
-        <div className="grid grid-cols-2 gap-y-4 gap-x-2">
-           {/* Duration */}
-           <div className="flex flex-col">
-              <span className="text-[10px] text-slate-500 uppercase font-bold">Duration</span>
-              <span className="text-2xl font-mono text-white">{formatDuration(data.driveTime)} <span className="text-xs font-sans text-slate-500 font-normal">min</span></span>
-           </div>
-
+        <div className="grid grid-cols-3 gap-2 text-center">
            {/* Distance */}
-           <div className="flex flex-col">
-              <span className="text-[10px] text-slate-500 uppercase font-bold">Distance</span>
-              <span className="text-2xl font-mono text-white">{(data.tripDistance || 0).toFixed(1)} <span className="text-xs font-sans text-slate-500 font-normal">km</span></span>
-           </div>
-
-           {/* Avg Speed */}
-           <div className="flex flex-col">
-              <span className="text-[10px] text-slate-500 uppercase font-bold">Avg Speed</span>
-              <span className="text-xl font-mono text-white">{avgSpeed.toFixed(0)} <span className="text-xs font-sans text-slate-500 font-normal">km/h</span></span>
+           <div className="flex flex-col items-center">
+              <span className="text-[10px] text-slate-500 uppercase font-bold mb-1">Distance</span>
+              <span className="text-xl font-mono text-white">{(data.tripDistance || 0).toFixed(1)} <span className="text-xs font-sans text-slate-500 font-normal">km</span></span>
            </div>
 
            {/* Consumption */}
-           <div className="flex flex-col">
-              <span className="text-[10px] text-slate-500 uppercase font-bold">Avg Consumption</span>
+           <div className="flex flex-col items-center border-l border-slate-700/50 pl-2">
+              <span className="text-[10px] text-slate-500 uppercase font-bold mb-1">Consumption</span>
               <span className="text-xl font-mono text-white">{Math.round(data.tripConsumptionAvg || 0)} <span className="text-xs font-sans text-slate-500 font-normal">Wh/km</span></span>
            </div>
 
            {/* Total Energy */}
-           <div className="flex flex-col col-span-2 border-t border-slate-700 mt-2 pt-2">
-              <div className="flex justify-between items-baseline">
-                <span className="text-[10px] text-slate-500 uppercase font-bold">Total Energy Used</span>
-                <span className="text-lg font-mono text-white">{(data.tripEnergyUsed || 0).toFixed(2)} <span className="text-xs font-sans text-slate-500 font-normal">kWh</span></span>
-              </div>
+           <div className="flex flex-col items-center border-l border-slate-700/50 pl-2">
+              <span className="text-[10px] text-slate-500 uppercase font-bold mb-1">Energy Used</span>
+              <span className="text-xl font-mono text-white">{(data.tripEnergyUsed || 0).toFixed(2)} <span className="text-xs font-sans text-slate-500 font-normal">kWh</span></span>
            </div>
         </div>
       </div>
