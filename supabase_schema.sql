@@ -11,59 +11,68 @@ CREATE TABLE telemetry (
   vehicle_id TEXT NOT NULL,
   timestamp BIGINT NOT NULL,
   
-  -- Battery & Range (from metrics_i3.csv v.b.*)
+  -- Battery & Electrical
   soc FLOAT,                 -- v.b.soc (%)
   soh FLOAT,                 -- v.b.soh (%)
   voltage FLOAT,             -- v.b.voltage (V)
   current FLOAT,             -- v.b.current (A)
   power FLOAT,               -- v.b.power (kW)
-  capacity_ah FLOAT,         -- v.b.cac (Ah)
-  est_range FLOAT,           -- v.b.range.est (km)
-  ideal_range FLOAT,         -- v.b.range.ideal (km)
-  range_full FLOAT,          -- v.b.range.full (km)
+  range_est FLOAT,           -- xi3.v.b.range.bc (km)
   
-  -- i3 Specific Ranges (xi3.v.b.range.*)
-  range_bc FLOAT,            -- xi3.v.b.range.bc
-  range_comfort FLOAT,       -- xi3.v.b.range.comfort
-  range_ecopro FLOAT,        -- xi3.v.b.range.ecopro
-  range_ecoproplus FLOAT,    -- xi3.v.b.range.ecoproplus
+  -- 12V System
+  voltage_12v FLOAT,         -- v.b.12v.voltage
+  current_12v FLOAT,         -- v.b.12v.current
   
-  -- 12V System (v.b.12v.*)
-  voltage_12v FLOAT,         
-  current_12v FLOAT,         
-  
-  -- Charging (v.c.* and xi3.v.c.*)
-  charge_state TEXT,         -- v.c.state (charging, stopped, etc.)
-  charge_kwh FLOAT,          -- v.c.kwh (kWh)
-  charge_temp FLOAT,         -- xi3.v.c.temp.gatedriver or v.c.temp
-  charge_pilot_a FLOAT,      -- xi3.v.c.pilotsignal (A)
+  -- Charging
+  charge_pilot_a FLOAT,      -- xi3.v.c.pilotsignal
   charge_plug_status TEXT,   -- xi3.v.c.chargeplugstatus
   
-  -- Driving & GPS (v.p.*)
-  speed FLOAT,               -- v.p.speed (km/h)
-  odometer FLOAT,            -- v.p.odometer (km)
+  -- Driving & Performance
+  speed FLOAT,               -- v.p.speed
+  odometer FLOAT,            -- v.p.odometer
+  motor_rpm FLOAT,           -- v.m.rpm
+  consumption_inst FLOAT,    -- v.b.consumption (Wh/km)
+  
+  -- Trip Stats
+  trip_distance FLOAT,       -- v.p.trip
+  trip_consumption FLOAT,    -- xi3.v.p.tripconsumption
+  trip_energy FLOAT,         -- v.b.energy.used
+  
+  -- GPS & Location
   latitude FLOAT,            
   longitude FLOAT,           
-  elevation FLOAT,           -- v.p.altitude (m)
-  direction FLOAT,           -- v.p.direction (°)
-  gps_lock BOOLEAN,          -- v.p.gpslock
+  elevation FLOAT,           -- v.p.altitude
+  location_name TEXT,        -- v.p.location
   gps_sats INT,              -- v.p.satcount
-  trip_consumption FLOAT,    -- xi3.v.p.tripconsumption (Wh/km)
+  gps_quality FLOAT,         -- v.p.gpssq
   
-  -- Temperatures (v.e.*, v.b.*, v.m.*)
-  temp_battery FLOAT,        -- v.b.temp (°C)
-  temp_motor FLOAT,          -- v.m.temp (°C)
-  temp_ambient FLOAT,        -- v.e.temp (°C)
-  inside_temp FLOAT,         -- v.e.cabintemp (°C)
-  inverter_temp FLOAT,       -- v.i.temp (°C)
+  -- Temperatures
+  temp_battery FLOAT,        -- v.b.temp
+  temp_motor FLOAT,          -- v.m.temp
+  temp_ambient FLOAT,        -- v.e.temp
+  inside_temp FLOAT,         -- v.e.cabintemp
+  charger_temp FLOAT,        -- v.c.temp
   
-  -- Status (v.e.*)
+  -- Climate & Status
+  vent_mode TEXT,            -- v.e.cabinintake
+  ac_status BOOLEAN,         -- v.e.cooling
   locked BOOLEAN,            -- v.e.locked
   car_on BOOLEAN,            -- v.e.on
   gear TEXT,                 -- v.e.gear
-  park_time FLOAT,           -- v.e.parktime (Sec)
-  drive_time FLOAT,          -- v.e.drivetime (Sec)
+  park_time FLOAT,           -- v.e.parktime
+  drive_time FLOAT,          -- v.e.drivetime
+  last_update_age FLOAT,     -- xi3.s.age
   
+  -- Doors
+  door_fl BOOLEAN,
+  door_fr BOOLEAN,
+  door_rl BOOLEAN,
+  door_rr BOOLEAN,
+  door_hood BOOLEAN,
+  door_trunk BOOLEAN,
+  door_cp BOOLEAN,
+  
+  -- Raw Data
   raw_metrics JSONB,
   car_metrics JSONB
 );
@@ -80,11 +89,9 @@ CREATE TABLE drives (
   duration FLOAT,            -- min
   start_soc FLOAT,
   end_soc FLOAT,
-  start_odometer FLOAT,
-  end_odometer FLOAT,
   consumption FLOAT,         -- kWh
   efficiency FLOAT,          -- Wh/km
-  path JSONB                 
+  path JSONB                 -- Array of {lat, lng, speed, soc}
 );
 
 -- 3. Charges Table
@@ -95,11 +102,10 @@ CREATE TABLE charges (
   end_date TIMESTAMPTZ,
   location TEXT,
   added_kwh FLOAT,
-  duration FLOAT,            
-  start_soc FLOAT,
-  end_soc FLOAT,
-  max_power FLOAT,
-  chart_data JSONB
+  duration FLOAT,            -- min
+  avg_power FLOAT,           -- kW
+  max_power FLOAT,           -- kW
+  chart_data JSONB           -- Array of {time, power, soc}
 );
 
 -- RLS & Permissions

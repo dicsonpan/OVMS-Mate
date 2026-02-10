@@ -45,7 +45,7 @@ const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
 
   return (
     <div className="space-y-4">
-      {/* HEADER: Vehicle Name & Doors Status */}
+      {/* MAIN CARD: Vehicle Name, Status, SOC, Odometer, Range */}
       <div className="bg-slate-800 rounded-2xl p-5 border border-slate-700 shadow-xl">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-white tracking-tight">
@@ -72,7 +72,7 @@ const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
           {data.gear && <span className="ml-auto bg-slate-700 text-white font-mono font-bold px-2 py-0.5 rounded text-xs">{data.gear}</span>}
         </div>
 
-        {/* SOC & RANGE LARGE */}
+        {/* SOC, ODOMETER, RANGE */}
         <div className="flex justify-between items-end mt-6">
           <div className="flex items-baseline gap-2">
             <span className={`text-6xl font-black ${data.soc < 20 ? 'text-red-500' : 'text-green-400'}`}>
@@ -80,6 +80,12 @@ const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
             </span>
             <span className="text-2xl font-bold text-slate-500">%</span>
           </div>
+          
+          <div className="flex flex-col items-center pb-2 px-2">
+             <div className="text-xl font-bold text-white tracking-wide">{Math.round(data.odometer || 0).toLocaleString()} <span className="text-xs text-slate-500 font-normal">km</span></div>
+             <div className="text-[8px] text-slate-500 uppercase font-bold tracking-widest">Odometer</div>
+          </div>
+
           <div className="text-right">
             <div className="text-4xl font-bold text-white">
               {Math.round(data.rangeEst || 0)} <span className="text-lg text-slate-500">km</span>
@@ -89,56 +95,45 @@ const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
         </div>
       </div>
 
-      {/* DASHBOARD / ODOMETER INFO */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
+      {/* COMPACT METRICS DASHBOARD (Single Row) */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 text-center">
           <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Power</div>
           <div className="text-lg font-mono font-bold">{(data.power || 0).toFixed(1)} <span className="text-xs">kW</span></div>
-          <div className="text-[9px] text-slate-600 mt-1">{data.motorRpm || 0} RPM</div>
         </div>
-        <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
+        <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 text-center">
           <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Consumption</div>
           <div className="text-lg font-mono font-bold">{Math.round(data.consumptionInst || 0)} <span className="text-xs">Wh/km</span></div>
-          <div className="text-[9px] text-slate-600 mt-1">Instantaneous</div>
         </div>
-        <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
+        <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 text-center">
           <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Speed</div>
           <div className="text-lg font-mono font-bold">{Math.round(data.speed || 0)} <span className="text-xs">km/h</span></div>
-          <div className="text-[9px] text-slate-600 mt-1">Current</div>
-        </div>
-        <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
-          <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Odometer</div>
-          <div className="text-lg font-mono font-bold">{Math.round(data.odometer || 0).toLocaleString()} <span className="text-xs">km</span></div>
-          <div className="text-[9px] text-slate-600 mt-1">Total Distance</div>
         </div>
       </div>
 
-      {/* CURRENT TRIP STATISTICS */}
-      <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700 shadow-lg">
-        <h3 className="text-xs font-black text-slate-500 uppercase mb-3 flex items-center gap-2">
-          <span className="w-1.5 h-3 bg-blue-500 rounded-full"></span> Current Trip Info
-        </h3>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="text-center">
-            <div className="text-[9px] text-slate-500 uppercase">Distance</div>
-            <div className="text-sm font-bold">{(data.tripDistance || 0).toFixed(1)} km</div>
+      {/* TEMPERATURE & VENTILATION (Moved Up) */}
+      <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-xs font-black text-slate-500 uppercase">Climate & Temps</h3>
+          <div className="flex gap-2">
+            {data.acStatus && <span className="text-[9px] bg-blue-900/50 text-blue-300 px-1.5 rounded">AC ON</span>}
+            {data.ventMode && <span className="text-[9px] bg-slate-700 text-slate-400 px-1.5 rounded">{data.ventMode}</span>}
           </div>
-          <div className="text-center">
-            <div className="text-[9px] text-slate-500 uppercase">Avg Cons.</div>
-            <div className="text-sm font-bold">{Math.round(data.tripConsumptionAvg || 0)} Wh/km</div>
-          </div>
-          <div className="text-center">
-            <div className="text-[9px] text-slate-500 uppercase">Total Used</div>
-            <div className="text-sm font-bold">{(data.tripEnergyUsed || 0).toFixed(2)} kWh</div>
-          </div>
-          <div className="text-center">
-            <div className="text-[9px] text-slate-500 uppercase">Duration</div>
-            <div className="text-sm font-bold">{formatDuration(data.driveTime)}</div>
-          </div>
-          <div className="text-center">
-            <div className="text-[9px] text-slate-500 uppercase">Avg Speed</div>
-            <div className="text-sm font-bold">{data.driveTime > 0 ? Math.round(data.tripDistance / (data.driveTime/3600)) : 0} km/h</div>
-          </div>
+        </div>
+        <div className="grid grid-cols-5 gap-1">
+          {[
+            { label: 'Ambient', val: data.tempAmbient, icon: '🌍' },
+            { label: 'Cabin', val: data.insideTemp, icon: '🛋️' },
+            { label: 'Battery', val: data.tempBattery, icon: '🔋' },
+            { label: 'Motor', val: data.tempMotor, icon: '⚙️' },
+            { label: 'Charger', val: data.chargerTemp, icon: '🔌' },
+          ].map((t, i) => (
+            <div key={i} className="text-center p-1 bg-slate-900/30 rounded-lg">
+              <div className="text-[14px]">{t.icon}</div>
+              <div className="text-[10px] text-white font-bold">{Math.round(t.val || 0)}°</div>
+              <div className="text-[7px] text-slate-500 uppercase">{t.label}</div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -177,29 +172,32 @@ const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
         </div>
       </div>
 
-      {/* TEMPERATURE & VENTILATION */}
-      <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="text-xs font-black text-slate-500 uppercase">Climate & Temps</h3>
-          <div className="flex gap-2">
-            {data.acStatus && <span className="text-[9px] bg-blue-900/50 text-blue-300 px-1.5 rounded">AC ON</span>}
-            {data.ventMode && <span className="text-[9px] bg-slate-700 text-slate-400 px-1.5 rounded">{data.ventMode}</span>}
+      {/* CURRENT TRIP STATISTICS (Moved Down) */}
+      <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700 shadow-lg">
+        <h3 className="text-xs font-black text-slate-500 uppercase mb-3 flex items-center gap-2">
+          <span className="w-1.5 h-3 bg-blue-500 rounded-full"></span> Current Trip Info
+        </h3>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="text-center">
+            <div className="text-[9px] text-slate-500 uppercase">Distance</div>
+            <div className="text-sm font-bold">{(data.tripDistance || 0).toFixed(1)} km</div>
           </div>
-        </div>
-        <div className="grid grid-cols-5 gap-1">
-          {[
-            { label: 'Ambient', val: data.tempAmbient, icon: '🌍' },
-            { label: 'Cabin', val: data.insideTemp, icon: '🛋️' },
-            { label: 'Battery', val: data.tempBattery, icon: '🔋' },
-            { label: 'Motor', val: data.tempMotor, icon: '⚙️' },
-            { label: 'Charger', val: data.chargerTemp, icon: '🔌' },
-          ].map((t, i) => (
-            <div key={i} className="text-center p-1 bg-slate-900/30 rounded-lg">
-              <div className="text-[14px]">{t.icon}</div>
-              <div className="text-[10px] text-white font-bold">{Math.round(t.val || 0)}°</div>
-              <div className="text-[7px] text-slate-500 uppercase">{t.label}</div>
-            </div>
-          ))}
+          <div className="text-center">
+            <div className="text-[9px] text-slate-500 uppercase">Avg Cons.</div>
+            <div className="text-sm font-bold">{Math.round(data.tripConsumptionAvg || 0)} Wh/km</div>
+          </div>
+          <div className="text-center">
+            <div className="text-[9px] text-slate-500 uppercase">Total Used</div>
+            <div className="text-sm font-bold">{(data.tripEnergyUsed || 0).toFixed(2)} kWh</div>
+          </div>
+          <div className="text-center">
+            <div className="text-[9px] text-slate-500 uppercase">Duration</div>
+            <div className="text-sm font-bold">{formatDuration(data.driveTime)}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-[9px] text-slate-500 uppercase">Avg Speed</div>
+            <div className="text-sm font-bold">{data.driveTime > 0 ? Math.round(data.tripDistance / (data.driveTime/3600)) : 0} km/h</div>
+          </div>
         </div>
       </div>
 
