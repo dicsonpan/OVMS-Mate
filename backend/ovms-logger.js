@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import mqtt from 'mqtt';
 
 console.log('================================================');
-console.log('   OVMS MATE LOGGER - i3 DRIVE TRACKER v2.1    ');
+console.log('   OVMS MATE LOGGER - i3 DRIVE & CHARGE v2.3   ');
 console.log('================================================');
 
 const CONFIG = {
@@ -16,21 +16,14 @@ const CONFIG = {
   batchInterval: 5000,
 };
 
-// --- DRIVE LOGIC CONSTANTS ---
-const DRIVE_COOLDOWN_MS = 15 * 60 * 1000; // 15 Minutes
+// --- LOGIC CONSTANTS ---
+const DRIVE_COOLDOWN_MS = 15 * 60 * 1000; 
 const MIN_DRIVE_DISTANCE_KM = 0.1;
+const MIN_CHARGE_DURATION_MIN = 1; 
 
-// --- STATE MACHINE ---
+// --- STATE MACHINES ---
 let activeDrive = null; 
-// activeDrive Structure:
-// {
-//   startTime: number (ms),
-//   startOdo: number,
-//   startSoc: number,
-//   maxSpeed: number,
-//   path: Array<{ts, lat, lng, speed, soc, elevation}>,
-//   cooldownStartTime: number | null
-// }
+let activeCharge = null;
 
 const supabase = (CONFIG.supabaseUrl && CONFIG.supabaseKey) 
   ? createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey) 
@@ -50,8 +43,8 @@ let currentState = {
 const DB_MAP = {
   'v.b.soc': 'soc',
   'v.b.soh': 'soh',
-  'v.b.capacity': 'capacity', // Added: Usable capacity in kWh
-  'v.b.cac': 'cac',           // Added: Calculated Amp-hours
+  'v.b.capacity': 'capacity', // Usable capacity (kWh)
+  'v.b.cac': 'cac',           // Calculated Capacity (Ah)
   'v.b.voltage': 'voltage',
   'v.b.current': 'current',
   'v.b.power': 'power',
@@ -81,8 +74,6 @@ const DB_MAP = {
   'v.e.cooling': 'acStatus',
   'v.b.12v.current': 'v12current',
   'v.b.12v.voltage': 'v12voltage',
-  
-  // Door details
   'v.d.cp': 'doorChargePort',
   'v.d.fl': 'doorFL',
   'v.d.fr': 'doorFR',
@@ -90,12 +81,11 @@ const DB_MAP = {
   'v.d.rr': 'doorRR',
   'v.d.hood': 'doorHood',
   'v.d.trunk': 'doorTrunk',
-
-  // xi3 specific
   'xi3.v.b.range.bc': 'rangeEst',
   'xi3.s.age': 'lastUpdateAge',
-  'xi3.v.c.pilotsignal': 'chargePilotA',
-  'xi3.v.c.chargeplugstatus': 'chargePlugStatus',
+  'xi3.v.c.pilotsignal': 'chargePilotA',       // <--- Critical for i3
+  'xi3.v.c.chargeplugstatus': 'chargePlugStatus', // <--- Critical for i3
+  'xi3.v.c.readytocharge': 'readyToCharge',
   'xi3.v.p.tripconsumption': 'tripConsumptionAvg'
 };
 
@@ -123,16 +113,29 @@ client.on('message', (topic, message) => {
   currentState.isDirty = true;
 });
 
+// Helper to get Pack Capacity (kWh)
+// i3 60Ah ~ 18.8kWh usable, 94Ah ~ 27.2kWh, 120Ah ~ 37.9kWh
+const getPackCapacity = () => {
+  // If v.b.capacity (kWh) is reported by OVMS, use it.
+  if (currentState.capacity) return currentState.capacity;
+  
+  // Otherwise estimate from CAC (Ah). Nominal voltage ~360V for i3.
+  if (currentState.cac) {
+     return (currentState.cac * 360) / 1000;
+  }
+  return 37.9; // Default fallback (120Ah model)
+};
+
 // --- DRIVE PROCESSOR ---
 const processDriveLogic = async () => {
+  if (activeCharge) return; // Don't drive if charging
+
   const now = Date.now();
   const speed = currentState.speed || 0;
-  
   const isMoving = speed > 0;
   
-  // 1. START CONDITION: Car starts moving
   if (!activeDrive && isMoving) {
-    console.log(`🚗 Drive Started! Odo: ${currentState.odometer}, SoC: ${currentState.soc}%`);
+    console.log(`🚗 Drive Started! Odo: ${currentState.odometer}`);
     activeDrive = {
       startTime: now,
       startOdo: currentState.odometer,
@@ -142,13 +145,11 @@ const processDriveLogic = async () => {
     };
   }
 
-  // 2. ONGOING DRIVE
   if (activeDrive) {
-    // Record Path Points (only if we have GPS)
     if (currentState.latitude && currentState.longitude) {
-       // Avoid duplicates: only push if different from last point OR significant time passed
        const lastPoint = activeDrive.path[activeDrive.path.length - 1];
-       if (!lastPoint || (now - lastPoint.ts > 5000)) { // Sample every 5s
+       // Sample points every 5 seconds or if missing
+       if (!lastPoint || (now - lastPoint.ts > 5000)) { 
          activeDrive.path.push({
            ts: now,
            lat: currentState.latitude,
@@ -160,74 +161,31 @@ const processDriveLogic = async () => {
        }
     }
 
-    // 3. COOLDOWN / STOP CHECK
-    // If not moving, start cooldown timer
     if (!isMoving) {
       if (!activeDrive.cooldownStartTime) {
         activeDrive.cooldownStartTime = now;
-        console.log(`⏱️ Car stopped. Cooldown started.`);
-      } else {
-        const elapsed = now - activeDrive.cooldownStartTime;
-        // 4. END CONDITION
-        if (elapsed > DRIVE_COOLDOWN_MS) {
-          await finalizeDrive(activeDrive);
-          activeDrive = null;
-        }
+      } else if (now - activeDrive.cooldownStartTime > DRIVE_COOLDOWN_MS) {
+        await finalizeDrive(activeDrive);
+        activeDrive = null;
       }
     } else {
-      // Car moved again, reset cooldown
-      if (activeDrive.cooldownStartTime) {
-        console.log(`🚗 Car moved again. Cooldown reset.`);
-        activeDrive.cooldownStartTime = null;
-      }
+      activeDrive.cooldownStartTime = null;
     }
   }
 };
 
 const finalizeDrive = async (drive) => {
-  // Logic 3: End time is "now" minus the 15 min cooldown
   const realEndTime = drive.cooldownStartTime || Date.now();
-  const endOdo = currentState.odometer;
-  const distance = endOdo - drive.startOdo;
-  
-  // Logic 4: Filter short drives
-  if (distance < MIN_DRIVE_DISTANCE_KM) {
-    console.log(`🗑️ Drive discarded (Distance ${distance.toFixed(3)}km < 0.1km)`);
-    return;
-  }
+  const distance = currentState.odometer - drive.startOdo;
+  if (distance < MIN_DRIVE_DISTANCE_KM) return;
 
   const durationMin = (realEndTime - drive.startTime) / 1000 / 60;
   const endSoc = currentState.soc;
+  const packCap = getPackCapacity();
+  const energyUsed = ((drive.startSoc - endSoc) / 100) * packCap;
   
-  // --- ENERGY CALCULATION UPDATE ---
-  // Formula: (StartSoC - EndSoC) * TotalCapacity
-  // We prefer 'v.b.capacity' (kWh) which is the BMS reported usable capacity.
-  // If not available, we estimate using 'v.b.cac' (Ah) * 360V (Nominal Voltage for i3) / 1000.
-  
-  let packCapacityKwh = currentState.capacity;
-  if (!packCapacityKwh && currentState.cac) {
-     // Fallback: Estimate kWh from Ah. 
-     // i3 60Ah ~ 360V, 94Ah ~ 352V, 120Ah ~ 352V nominal. Using 360V as a safe general multiplier.
-     packCapacityKwh = (currentState.cac * 360) / 1000;
-  }
-  // Ultimate fallback if metrics missing (assume 120Ah / 40kWh model as default)
-  if (!packCapacityKwh) packCapacityKwh = 37.9;
-
-  const deltaSoc = drive.startSoc - endSoc;
-  
-  // Calculate Energy Used (kWh)
-  // We use Math.max(0, ...) to avoid negative consumption on downhill-only short trips (regen), 
-  // though physically it is negative energy, usually drives show 0 or positive consumption.
-  let energyUsed = (deltaSoc / 100) * packCapacityKwh;
-  
-  // If negative (net regen), we can either store negative or 0. TeslaMate usually stores 0 or net.
-  // Let's keep the signed value if it's significant, but usually trips consume energy.
-  
-  // Calculate efficiency (Wh/km)
   let efficiency = 0;
-  if (distance > 0 && energyUsed > 0) {
-    efficiency = (energyUsed * 1000) / distance;
-  }
+  if (distance > 0 && energyUsed > 0) efficiency = (energyUsed * 1000) / distance;
 
   const drivePayload = {
     vehicle_id: CONFIG.vehicleId,
@@ -237,27 +195,128 @@ const finalizeDrive = async (drive) => {
     duration: durationMin,
     start_soc: drive.startSoc,
     end_soc: endSoc,
-    consumption: energyUsed, // Calculated from SoC delta
-    efficiency: efficiency, // Wh/km
+    consumption: energyUsed,
+    efficiency: efficiency,
     path: drive.path
   };
 
-  console.log(`✅ Drive Finished! Dist: ${distance.toFixed(2)}km, Energy: ${energyUsed.toFixed(2)}kWh (Cap: ${packCapacityKwh.toFixed(1)}kWh)`);
+  console.log(`✅ Drive Saved: ${distance.toFixed(1)}km`);
+  if (supabase) await supabase.from('drives').insert(drivePayload);
+};
+
+// --- CHARGE PROCESSOR ---
+const processChargeLogic = async () => {
+  if (activeDrive) return; // Don't charge if driving
+
+  const now = Date.now();
   
-  if (supabase) {
-    const { error } = await supabase.from('drives').insert(drivePayload);
-    if (error) console.error("Error saving drive:", error);
-    else console.log("💾 Drive saved to Supabase.");
+  // 1. Determine Status based on i3 signals
+  // xi3.v.c.chargeplugstatus: "Connected" (Case sensitive usually, but parseValue handles lower)
+  // xi3.v.c.pilotsignal: > 0A
+  
+  const plugStatus = currentState.chargePlugStatus;
+  const pilotSignal = currentState.chargePilotA || 0;
+  const readyToCharge = currentState.readyToCharge; // boolean from parseValue
+
+  const isConnected = plugStatus === true || plugStatus === 'Connected';
+  const hasPower = pilotSignal > 0;
+  
+  const isCharging = isConnected && hasPower;
+  
+  // End conditions: Pilot=0 OR Ready=No OR Plug!=Connected
+  const isStopped = (pilotSignal === 0) || (readyToCharge === false) || (!isConnected);
+
+  // START
+  if (!activeCharge && isCharging) {
+    console.log(`⚡ Charging Started! SoC: ${currentState.soc}%`);
+    activeCharge = {
+      startTime: now,
+      startSoc: currentState.soc,
+      location: currentState.locationName || '',
+      latitude: currentState.latitude,
+      longitude: currentState.longitude,
+      chartData: [],
+      maxPower: 0,
+      powerSum: 0,
+      samples: 0
+    };
   }
+
+  // UPDATE
+  if (activeCharge) {
+    // Power is usually negative during charge in v.b.power, but we want absolute for charts
+    const rawPower = currentState.power || 0;
+    const absPower = Math.abs(rawPower);
+    
+    activeCharge.maxPower = Math.max(activeCharge.maxPower, absPower);
+    activeCharge.powerSum += absPower;
+    activeCharge.samples++;
+    
+    // Throttle chart points: Record every minute
+    const lastPoint = activeCharge.chartData[activeCharge.chartData.length - 1];
+    if (!lastPoint || (now - lastPoint.timestamp > 60000)) {
+      activeCharge.chartData.push({
+        time: new Date(now).toISOString(),
+        timestamp: now,
+        power: absPower, // Record absolute power
+        soc: currentState.soc
+      });
+    }
+
+    // END
+    if (isStopped) {
+      console.log(`⚡ Charging Stopped. Pilot: ${pilotSignal}, Plug: ${plugStatus}`);
+      await finalizeCharge(activeCharge);
+      activeCharge = null;
+    }
+  }
+};
+
+const finalizeCharge = async (charge) => {
+  const endTime = Date.now();
+  const durationMin = (endTime - charge.startTime) / 1000 / 60;
+  
+  // 7. Auto Filter: Remove duration < 1 min
+  if (durationMin < MIN_CHARGE_DURATION_MIN) {
+     console.log(`🗑️ Charge discarded (Duration ${durationMin.toFixed(1)} min < 1 min)`);
+     return;
+  }
+
+  const endSoc = currentState.soc;
+  const packCap = getPackCapacity();
+  
+  // 3. Energy Calculation: (EndSoC - StartSoC) * Capacity
+  let addedKwh = ((endSoc - charge.startSoc) / 100) * packCap;
+  if (addedKwh < 0) addedKwh = 0; 
+
+  const avgPower = charge.samples > 0 ? (charge.powerSum / charge.samples) : 0;
+
+  const payload = {
+    vehicle_id: CONFIG.vehicleId,
+    date: new Date(charge.startTime).toISOString(),
+    end_date: new Date(endTime).toISOString(),
+    location: charge.location,
+    latitude: charge.latitude,
+    longitude: charge.longitude,
+    start_soc: charge.startSoc,
+    end_soc: endSoc,
+    added_kwh: addedKwh,
+    duration: durationMin,
+    avg_power: avgPower,
+    max_power: charge.maxPower,
+    chart_data: charge.chartData
+  };
+
+  console.log(`✅ Charge Saved: +${addedKwh.toFixed(2)} kWh`);
+  if (supabase) await supabase.from('charges').insert(payload);
 };
 
 
 // --- MAIN LOOP ---
 setInterval(async () => {
-  // 1. Process Logic
   await processDriveLogic();
+  await processChargeLogic();
 
-  // 2. Save Telemetry Batch
   if (!supabase || !currentState.isDirty) return;
   
   const payload = {
@@ -279,7 +338,7 @@ setInterval(async () => {
     voltage_12v: currentState.v12voltage,
     current_12v: currentState.v12current,
     charge_pilot_a: currentState.chargePilotA,
-    charge_plug_status: currentState.chargePlugStatus ? 'Connected' : 'Not connected',
+    charge_plug_status: currentState.chargePlugStatus === true ? 'Connected' : (currentState.chargePlugStatus || 'Not connected'),
     latitude: currentState.latitude,
     longitude: currentState.longitude,
     elevation: currentState.elevation,

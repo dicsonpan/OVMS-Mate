@@ -1,4 +1,3 @@
-
 import { DriveSession, ChargeSession, TelemetryData } from '../types';
 
 // Helper to generate random path
@@ -59,11 +58,14 @@ export const MOCK_CHARGES: ChargeSession[] = [
     date: '2023-10-24T20:00:00Z',
     location: 'Home',
     addedKwh: 25.5,
+    startSoc: 40,
+    endSoc: 85,
     duration: 240,
     avgPower: 6.4,
     maxPower: 7.2,
     chartData: Array.from({ length: 10 }, (_, i) => ({
       time: `${i * 24}m`,
+      timestamp: new Date('2023-10-24T20:00:00Z').getTime() + (i * 24 * 60000),
       power: i < 8 ? 7.2 : 3.0,
       soc: 40 + i * 5
     }))
@@ -73,11 +75,14 @@ export const MOCK_CHARGES: ChargeSession[] = [
     date: '2023-10-22T14:30:00Z',
     location: 'Supercharger X',
     addedKwh: 35.0,
+    startSoc: 10,
+    endSoc: 82,
     duration: 45,
     avgPower: 45.0,
     maxPower: 50.0,
     chartData: Array.from({ length: 10 }, (_, i) => ({
       time: `${i * 5}m`,
+      timestamp: new Date('2023-10-22T14:30:00Z').getTime() + (i * 5 * 60000),
       power: 50 - i * 2,
       soc: 10 + i * 8
     }))

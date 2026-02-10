@@ -34,6 +34,7 @@ export interface DriveSession {
 // Added ChargeChartPoint for charging visualization
 export interface ChargeChartPoint {
   time: string;
+  timestamp: number;
   power: number;
   soc: number;
 }
@@ -44,7 +45,11 @@ export interface ChargeSession {
   date: string;
   endDate?: string;
   location: string;
+  latitude?: number;
+  longitude?: number;
   addedKwh: number;
+  startSoc: number;
+  endSoc: number;
   duration: number;
   avgPower: number;
   maxPower: number;
@@ -87,6 +92,7 @@ export interface TelemetryData {
   chargeTemp?: number;
   chargePilotA?: number; // xi3.v.c.pilotsignal
   chargePlugStatus?: string; // xi3.v.c.chargeplugstatus
+  readyToCharge?: boolean; // xi3.v.c.readytocharge
   
   // Temps & Vent
   tempBattery: number;
@@ -130,7 +136,9 @@ export interface OvmsConfig {
   supabaseUrl: string;
   supabaseKey: string;
   vehicleId: string;
-  vehicleName?: string; // Added vehicle name setting
+  vehicleName?: string; 
   serverPassword?: string;
   serverUrl?: string;
+  costPerKwh?: number; // New setting
+  currency?: string;   // New setting
 }

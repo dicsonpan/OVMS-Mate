@@ -5,14 +5,13 @@ import StatusCard from './components/StatusCard';
 import DriveList from './components/DriveList';
 import ChargingStats from './components/ChargingStats';
 import LiveMap from './components/LiveMap';
-import { VehicleState, TelemetryData, OvmsConfig, DriveSession, ChargeSession } from './types';
-import { fetchLatestTelemetry, fetchCharges } from './services/dataService';
+import { TelemetryData, OvmsConfig, DriveSession } from './types';
+import { fetchLatestTelemetry } from './services/dataService';
 import { isSupabaseConfigured } from './services/supabaseClient';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
-  const [charges, setCharges] = useState<ChargeSession[]>([]);
   
   // Map State
   const [selectedDrive, setSelectedDrive] = useState<DriveSession | null>(null);
@@ -24,7 +23,9 @@ const App: React.FC = () => {
     vehicleId: '',
     vehicleName: '',
     serverUrl: 'huashi.sparkminds.io:18830',
-    serverPassword: ''
+    serverPassword: '',
+    costPerKwh: 0.15, // Default
+    currency: 'USD'   // Default
   });
   const [showPassword, setShowPassword] = useState(false);
 
@@ -45,8 +46,6 @@ const App: React.FC = () => {
     const loadData = async () => {
        const t = await fetchLatestTelemetry();
        setTelemetry(t);
-       const c = await fetchCharges();
-       setCharges(c);
     };
     loadData();
 
@@ -115,7 +114,7 @@ const App: React.FC = () => {
       case 'charging':
         return (
           <div className="p-4 max-w-lg mx-auto">
-             <ChargingStats charges={charges} />
+             <ChargingStats config={config} />
           </div>
         );
       case 'settings':
@@ -143,10 +142,45 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* 2. Database Connection */}
+            {/* 2. Charging Cost Settings */}
             <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-lg">
               <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-white">
                 <span className="bg-green-500 w-2 h-6 rounded-full"></span>
+                Charging Costs
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-300 mb-1">Cost per kWh</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={config.costPerKwh}
+                    onChange={(e) => setConfig({...config, costPerKwh: parseFloat(e.target.value)})}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-600"
+                    placeholder="0.15"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-300 mb-1">Currency</label>
+                  <select 
+                    value={config.currency}
+                    onChange={(e) => setConfig({...config, currency: e.target.value})}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white"
+                  >
+                     <option value="USD">USD ($)</option>
+                     <option value="EUR">EUR (€)</option>
+                     <option value="GBP">GBP (£)</option>
+                     <option value="CNY">CNY (¥)</option>
+                     <option value="JPY">JPY (¥)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Database Connection */}
+            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-lg">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-white">
+                <span className="bg-purple-500 w-2 h-6 rounded-full"></span>
                 Database Connection
               </h3>
               <div className="space-y-4">
@@ -182,7 +216,7 @@ const App: React.FC = () => {
             </div>
             
             <div className="text-center text-xs text-slate-500 pb-4">
-              OVMS Mate v0.2.0 • BMW i3 Edition
+              OVMS Mate v0.2.1 • BMW i3 Edition
             </div>
           </div>
         );

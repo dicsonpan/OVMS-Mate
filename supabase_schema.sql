@@ -101,6 +101,10 @@ CREATE TABLE charges (
   date TIMESTAMPTZ NOT NULL,
   end_date TIMESTAMPTZ,
   location TEXT,
+  latitude FLOAT,
+  longitude FLOAT,
+  start_soc FLOAT,
+  end_soc FLOAT,
   added_kwh FLOAT,
   duration FLOAT,            -- min
   avg_power FLOAT,           -- kW

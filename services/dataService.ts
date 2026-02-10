@@ -35,6 +35,7 @@ export const fetchLatestTelemetry = async (): Promise<TelemetryData> => {
            chargeState: data.charge_pilot_a > 0 ? 'Charging' : 'Stopped',
            chargePilotA: data.charge_pilot_a,
            chargePlugStatus: data.charge_plug_status,
+           readyToCharge: data.charge_pilot_a > 0, // Approx
            tempBattery: data.temp_battery || 0,
            tempMotor: data.temp_motor || 0,
            tempAmbient: data.temp_ambient || 0,
@@ -88,11 +89,9 @@ export const fetchDrives = async (options: FetchDrivesOptions = {}): Promise<Dri
         .order('start_date', { ascending: false });
 
       if (startDate) {
-        // Start of the day for start date
         query = query.gte('start_date', `${startDate}T00:00:00.000Z`);
       }
       if (endDate) {
-        // End of the day for end date
         query = query.lte('start_date', `${endDate}T23:59:59.999Z`);
       }
 
@@ -123,33 +122,62 @@ export const fetchDrives = async (options: FetchDrivesOptions = {}): Promise<Dri
   if (endDate) {
     filteredMock = filteredMock.filter(d => new Date(d.startDate) <= new Date(`${endDate}T23:59:59Z`));
   }
-  // Sort descending
   filteredMock.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
-  
-  // Pagination
   return filteredMock.slice(offset, offset + limit);
 };
 
-export const fetchCharges = async (): Promise<ChargeSession[]> => {
+interface FetchChargesOptions {
+  limit?: number;
+  offset?: number;
+  startDate?: string;
+  endDate?: string;
+}
+
+export const fetchCharges = async (options: FetchChargesOptions = {}): Promise<ChargeSession[]> => {
+  const { limit = 10, offset = 0, startDate, endDate } = options;
+
   if (isSupabaseConfigured() && supabase) {
     try {
-      const { data } = await supabase
+      let query = supabase
         .from('charges')
         .select('*')
-        .order('date', { ascending: false })
-        .limit(20);
+        .order('date', { ascending: false });
+
+      // Automatic filter: duration > 1 min
+      query = query.gt('duration', 1);
+
+      if (startDate) {
+        query = query.gte('date', `${startDate}T00:00:00.000Z`);
+      }
+      if (endDate) {
+        query = query.lte('date', `${endDate}T23:59:59.999Z`);
+      }
+
+      query = query.range(offset, offset + limit - 1);
+
+      const { data } = await query;
       if (data) return data.map((c: any) => ({
         id: c.id,
         date: c.date,
         endDate: c.end_date,
         location: c.location,
-        addedKwh: c.added_kwh || 0,
+        latitude: c.latitude,
+        longitude: c.longitude,
+        startSoc: c.start_soc || 0,
+        endSoc: c.end_soc || 0,
+        addedKwh: c.added_kwh !== null ? Number(c.added_kwh.toFixed(1)) : 0,
         duration: c.duration || 0,
-        avgPower: c.avg_power || 0,
-        maxPower: c.max_power || 0,
+        avgPower: c.avg_power !== null ? Number(c.avg_power.toFixed(1)) : 0,
+        maxPower: c.max_power !== null ? Number(c.max_power.toFixed(1)) : 0,
         chartData: c.chart_data || []
       })) as ChargeSession[];
     } catch (e) { console.warn("Fetch charges failed:", e); }
   }
-  return MOCK_CHARGES;
+  
+  // Mock Data fallback
+  let filtered = [...MOCK_CHARGES];
+  if (startDate) filtered = filtered.filter(c => new Date(c.date) >= new Date(startDate));
+  if (endDate) filtered = filtered.filter(c => new Date(c.date) <= new Date(`${endDate}T23:59:59Z`));
+  filtered = filtered.filter(c => c.duration > 1);
+  return filtered.slice(offset, offset + limit);
 };
