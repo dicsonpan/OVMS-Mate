@@ -9,10 +9,12 @@ export enum VehicleState {
 
 // Added DrivePathPoint to support trajectory path in DriveSession
 export interface DrivePathPoint {
+  ts: number; // Added timestamp for X-axis
   lat: number;
   lng: number;
   speed: number;
   soc: number;
+  elevation: number;
 }
 
 // Added DriveSession interface for drive tracking

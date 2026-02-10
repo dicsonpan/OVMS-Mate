@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import mqtt from 'mqtt';
 
 console.log('================================================');
-console.log('   OVMS MATE LOGGER - i3 HOME REFIT v10        ');
+console.log('   OVMS MATE LOGGER - i3 DRIVE TRACKER v2.0    ');
 console.log('================================================');
 
 const CONFIG = {
@@ -15,6 +15,22 @@ const CONFIG = {
   supabaseKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_KEY,
   batchInterval: 5000,
 };
+
+// --- DRIVE LOGIC CONSTANTS ---
+const DRIVE_COOLDOWN_MS = 15 * 60 * 1000; // 15 Minutes
+const MIN_DRIVE_DISTANCE_KM = 0.1;
+
+// --- STATE MACHINE ---
+let activeDrive = null; 
+// activeDrive Structure:
+// {
+//   startTime: number (ms),
+//   startOdo: number,
+//   startSoc: number,
+//   maxSpeed: number,
+//   path: Array<{ts, lat, lng, speed, soc, elevation}>,
+//   cooldownStartTime: number | null
+// }
 
 const supabase = (CONFIG.supabaseUrl && CONFIG.supabaseKey) 
   ? createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey) 
@@ -30,6 +46,7 @@ let currentState = {
   raw: {}, car: {}, isDirty: false
 };
 
+// Mapping MQTT topics to internal state keys
 const DB_MAP = {
   'v.b.soc': 'soc',
   'v.b.soh': 'soh',
@@ -104,7 +121,127 @@ client.on('message', (topic, message) => {
   currentState.isDirty = true;
 });
 
+// --- DRIVE PROCESSOR ---
+const processDriveLogic = async () => {
+  const now = Date.now();
+  const speed = currentState.speed || 0;
+  const gear = currentState.gear; // '0'=Neutral, negative=Reverse, 1+=Drive usually. 'P' is sometimes distinct or derived.
+  // NOTE: OVMS often reports Gear as number. 0 might be park/neutral.
+  // Reliable "Parked" check: Speed is 0 and (Gear is Park OR car is Locked/Off).
+  // For simplicity here: If speed > 0, we are definitely driving.
+  
+  const isMoving = speed > 0;
+  
+  // 1. START CONDITION: Car starts moving
+  if (!activeDrive && isMoving) {
+    console.log(`🚗 Drive Started! Odo: ${currentState.odometer}`);
+    activeDrive = {
+      startTime: now,
+      startOdo: currentState.odometer,
+      startSoc: currentState.soc,
+      path: [],
+      cooldownStartTime: null
+    };
+  }
+
+  // 2. ONGOING DRIVE
+  if (activeDrive) {
+    // Record Path Points (only if we have GPS)
+    if (currentState.latitude && currentState.longitude) {
+       // Avoid duplicates: only push if different from last point OR significant time passed
+       const lastPoint = activeDrive.path[activeDrive.path.length - 1];
+       if (!lastPoint || (now - lastPoint.ts > 5000)) { // Sample every 5s
+         activeDrive.path.push({
+           ts: now,
+           lat: currentState.latitude,
+           lng: currentState.longitude,
+           speed: speed,
+           soc: currentState.soc,
+           elevation: currentState.elevation || 0
+         });
+       }
+    }
+
+    // 3. COOLDOWN / STOP CHECK
+    // If not moving, start cooldown timer
+    if (!isMoving) {
+      if (!activeDrive.cooldownStartTime) {
+        activeDrive.cooldownStartTime = now;
+        console.log(`⏱️ Car stopped. Cooldown started.`);
+      } else {
+        const elapsed = now - activeDrive.cooldownStartTime;
+        // 4. END CONDITION
+        if (elapsed > DRIVE_COOLDOWN_MS) {
+          await finalizeDrive(activeDrive);
+          activeDrive = null;
+        }
+      }
+    } else {
+      // Car moved again, reset cooldown
+      if (activeDrive.cooldownStartTime) {
+        console.log(`🚗 Car moved again. Cooldown reset.`);
+        activeDrive.cooldownStartTime = null;
+      }
+    }
+  }
+};
+
+const finalizeDrive = async (drive) => {
+  // Logic 3: End time is "now" minus the 15 min cooldown
+  // Because the car actually stopped 15 mins ago.
+  const realEndTime = drive.cooldownStartTime || Date.now();
+  const endOdo = currentState.odometer;
+  const distance = endOdo - drive.startOdo;
+  
+  // Logic 4: Filter short drives
+  if (distance < MIN_DRIVE_DISTANCE_KM) {
+    console.log(`🗑️ Drive discarded (Distance ${distance.toFixed(3)}km < 0.1km)`);
+    return;
+  }
+
+  const durationMin = (realEndTime - drive.startTime) / 1000 / 60;
+  const endSoc = currentState.soc;
+  
+  // Calculate consumption (Energy used)
+  // We can try to use trip_energy from OVMS if valid, or estimate based on SoC % if capacity known.
+  // Using OVMS reported trip energy if available, else 0
+  const energyUsed = currentState.tripEnergyUsed || 0; 
+  
+  // Calculate efficiency (Wh/km)
+  let efficiency = 0;
+  if (distance > 0 && energyUsed > 0) {
+    efficiency = (energyUsed * 1000) / distance;
+  }
+
+  const drivePayload = {
+    vehicle_id: CONFIG.vehicleId,
+    start_date: new Date(drive.startTime).toISOString(),
+    end_date: new Date(realEndTime).toISOString(),
+    distance: distance,
+    duration: durationMin,
+    start_soc: drive.startSoc,
+    end_soc: endSoc,
+    consumption: energyUsed, // kWh
+    efficiency: efficiency, // Wh/km
+    path: drive.path
+  };
+
+  console.log(`✅ Drive Finished! Dist: ${distance.toFixed(2)}km, Dur: ${durationMin.toFixed(0)}m`);
+  
+  if (supabase) {
+    const { error } = await supabase.from('drives').insert(drivePayload);
+    if (error) console.error("Error saving drive:", error);
+    else console.log("💾 Drive saved to Supabase.");
+  }
+};
+
+
+// --- MAIN LOOP ---
 setInterval(async () => {
+  // 1. Process Logic
+  await processDriveLogic();
+
+  // 2. Save Telemetry Batch
   if (!supabase || !currentState.isDirty) return;
   
   const payload = {
@@ -162,5 +299,6 @@ setInterval(async () => {
 }, CONFIG.batchInterval);
 
 client.on('connect', () => {
+  console.log('🔌 MQTT Connected');
   client.subscribe(`ovms/${CONFIG.mqttUser}/${CONFIG.vehicleId}/metric/#`);
 });
