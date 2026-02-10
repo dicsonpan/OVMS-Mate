@@ -19,53 +19,53 @@ export const fetchLatestTelemetry = async (): Promise<TelemetryData> => {
            timestamp: data.timestamp,
            soc: data.soc,
            soh: data.soh,
-           capacity: data.capacity,
-           range: data.range,
-           estRange: data.est_range,
-           idealRange: data.ideal_range,
+           rangeEst: data.range_est,
            speed: data.speed,
            odometer: data.odometer,
+           tripDistance: data.trip_distance,
+           tripConsumptionAvg: data.trip_consumption,
+           consumptionInst: data.consumption_inst,
+           motorRpm: data.motor_rpm,
+           tripEnergyUsed: data.trip_energy,
            power: data.power || 0,
            voltage: data.voltage || 0,
            current: data.current || 0,
            voltage12v: data.voltage_12v,
            current12v: data.current_12v,
-           chargeState: data.charge_state || 'stopped',
-           chargeMode: data.charge_mode,
-           chargeKwh: data.charge_kwh,
-           chargeTime: data.charge_time,
-           chargeTemp: data.charge_temp,
-           chargePilot: data.charge_pilot,
-           chargeLimitSoc: data.charge_limit_soc,
-           chargeLimitRange: data.charge_limit_range,
-           chargeType: data.charge_type,
+           chargeState: data.charge_pilot_a > 0 ? 'Charging' : 'Stopped',
+           chargePilotA: data.charge_pilot_a,
+           chargePlugStatus: data.charge_plug_status,
            tempBattery: data.temp_battery || 0,
            tempMotor: data.temp_motor || 0,
            tempAmbient: data.temp_ambient || 0,
            insideTemp: data.inside_temp,
-           outsideTemp: data.outside_temp,
+           chargerTemp: data.charger_temp,
+           ventMode: data.vent_mode,
+           acStatus: data.ac_status,
            latitude: data.latitude,
            longitude: data.longitude,
-           elevation: data.elevation || 0, // From v.p.altitude in DB
+           elevation: data.elevation || 0,
            locationName: data.location_name,
-           direction: data.direction,
-           gpsLock: data.gps_lock,
-           gpsSats: data.gps_sats, // From v.p.satcount in DB
+           gpsSats: data.gps_sats,
+           gpsQuality: data.gps_quality,
            locked: data.locked,
-           valet: data.valet,
-           carAwake: data.car_awake,
+           carOn: data.car_on,
            gear: data.gear,
-           handbrake: data.handbrake,
            parkTime: data.park_time,
-           // Handle i3 specifics from car_metrics if they are there
-           i3PilotCurrent: data.car_metrics?.['xi3.v.c.pilotsignal'],
-           i3LedState: data.car_metrics?.['xi3.v.c.chargeledstate'],
-           i3PlugStatus: data.car_metrics?.['xi3.v.c.chargeplugstatus'],
+           driveTime: data.drive_time,
+           lastUpdateAge: data.last_update_age,
+           doorFL: data.door_fl,
+           doorFR: data.door_fr,
+           doorRL: data.door_rl,
+           doorRR: data.door_rr,
+           doorHood: data.door_hood,
+           doorTrunk: data.door_trunk,
+           doorChargePort: data.door_cp,
            rawMetrics: data.raw_metrics,
            carMetrics: data.car_metrics
         } as TelemetryData;
       }
-    } catch (e) { console.warn(e); }
+    } catch (e) { console.warn("Fetch telemetry failed:", e); }
   }
   return getLiveTelemetry();
 };
@@ -91,7 +91,7 @@ export const fetchDrives = async (): Promise<DriveSession[]> => {
           endSoc: d.end_soc,
           path: d.path || [] 
       })) as DriveSession[];
-    } catch (e) { console.warn(e); }
+    } catch (e) { console.warn("Fetch drives failed:", e); }
   }
   return MOCK_DRIVES;
 };
@@ -115,7 +115,7 @@ export const fetchCharges = async (): Promise<ChargeSession[]> => {
         maxPower: c.max_power || 0,
         chartData: c.chart_data || []
       })) as ChargeSession[];
-    } catch (e) { console.warn(e); }
+    } catch (e) { console.warn("Fetch charges failed:", e); }
   }
   return MOCK_CHARGES;
 };

@@ -3,220 +3,219 @@ import React from 'react';
 import { VehicleState, TelemetryData } from '../types';
 
 interface StatusCardProps {
-  status: VehicleState;
   data: TelemetryData;
+  vehicleName?: string;
 }
 
-const StatusCard: React.FC<StatusCardProps> = ({ status, data }) => {
+const formatDuration = (seconds: number) => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h > 0 ? h + 'h ' : ''}${m}m`;
+};
+
+const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
   if (!data) return null;
 
-  const chargingStates = ['charging', 'topoff', 'heating', 'prepare', 'timerwait'];
-  const driving = (data.speed > 0 || (data.gear !== 'P' && data.gear !== undefined && data.gear !== '0'));
-
-  let effectiveStatus = status;
-  // If database says charging or i3 specifics indicate charging
-  if (data.chargeState && chargingStates.includes(data.chargeState.toLowerCase())) {
-    effectiveStatus = VehicleState.Charging;
-  } else if (driving) {
-    effectiveStatus = VehicleState.Driving;
-  } else if (data.carAwake === false) {
-    effectiveStatus = VehicleState.Asleep;
-  } else {
-    effectiveStatus = (status === VehicleState.Offline) ? VehicleState.Offline : VehicleState.Parked;
+  // 1. Driving State Logic
+  let state = VehicleState.Parked;
+  let stateDuration = data.parkTime;
+  
+  if (data.lastUpdateAge > 10) {
+    state = VehicleState.Asleep;
+  } else if (data.driveTime > 1 || data.speed > 0) {
+    state = VehicleState.Driving;
+    stateDuration = data.driveTime;
   }
 
-  const isCharging = effectiveStatus === VehicleState.Charging;
-  const isDriving = effectiveStatus === VehicleState.Driving;
+  // 2. Charging Logic
+  const isCharging = (data.chargePilotA || 0) > 0 && data.chargePlugStatus === 'Connected';
+  const isCharged = (data.chargePilotA || 0) === 0 && data.soc === 100;
 
-  let batteryColor = 'text-green-500';
-  if (data.soc < 20) batteryColor = 'text-red-500';
-  else if (data.soc < 50) batteryColor = 'text-yellow-500';
+  // 3. Status Badges
+  const doorStatuses = [
+    { label: 'Locked', val: data.locked, icon: data.locked ? '🔒' : '🔓', color: data.locked ? 'bg-slate-700' : 'bg-red-500 animate-pulse' },
+    { label: 'Charge Port', val: data.doorChargePort, icon: '🔌' },
+    { label: 'Door FL', val: data.doorFL, icon: '🚪' },
+    { label: 'Door FR', val: data.doorFR, icon: '🚪' },
+    { label: 'Door RL', val: data.doorRL, icon: '🚪' },
+    { label: 'Door RR', val: data.doorRR, icon: '🚪' },
+    { label: 'Hood', val: data.doorHood, icon: '🚘' },
+    { label: 'Trunk', val: data.doorTrunk, icon: '📦' },
+  ].filter(s => s.val !== undefined && (s.label === 'Locked' || s.val === true));
 
   return (
     <div className="space-y-4">
-      {/* Main Status Card */}
-      <div className="w-full bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-700 relative overflow-hidden transition-all duration-500">
-        <div className={`absolute top-0 left-0 w-1.5 h-full transition-colors duration-500 ${
-          isDriving ? 'bg-blue-500' :
-          isCharging ? 'bg-green-500' : 
-          effectiveStatus === VehicleState.Asleep ? 'bg-purple-900' :
-          'bg-slate-600'
-        }`}></div>
-
-        {/* Header Section */}
-        <div className="flex justify-between items-start mb-6 pl-3">
-          <div>
-            <h2 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-              {data.vehicleId || 'OVMS Car'}
-              {data.locked !== undefined && (
-                <span className={`text-xs px-2 py-0.5 rounded-full border shadow-inner transition-all duration-300 ${
-                  data.locked 
-                    ? 'bg-slate-900/50 border-slate-600 text-slate-500' 
-                    : 'bg-red-500/10 border-red-500/50 text-red-400 animate-pulse font-bold'
-                }`}>
-                  {data.locked ? '🔒 Locked' : '🔓 Unlocked'}
-                </span>
-              )}
-            </h2>
-            <p className="text-slate-400 text-sm flex items-center gap-2 mt-2">
-              <span className={`w-2.5 h-2.5 rounded-full shadow-lg transition-colors duration-500 ${
-                effectiveStatus === VehicleState.Offline ? 'bg-red-600' : 
-                effectiveStatus === VehicleState.Asleep ? 'bg-purple-600' :
-                'bg-green-500 animate-pulse'
-              }`}></span>
-              <span className="uppercase font-bold tracking-wider text-xs bg-slate-700/50 px-2 py-0.5 rounded">
-                {effectiveStatus}
-              </span>
-              {data.gear && (
-                <span className={`font-mono font-bold px-1.5 rounded text-xs ${
-                  data.gear === 'P' ? 'bg-slate-700 text-slate-300' :
-                  data.gear === 'R' ? 'bg-red-900/50 text-red-300' :
-                  data.gear === 'D' ? 'bg-blue-900/50 text-blue-300' :
-                  'bg-slate-700 text-white'
-                }`}>
-                  {data.gear}
-                </span>
-              )}
-              {data.parkTime != null && effectiveStatus === VehicleState.Parked && (
-                <span className="text-[10px] text-slate-500">
-                  Parked {Math.floor(data.parkTime / 3600)}h {Math.floor((data.parkTime % 3600) / 60)}m
-                </span>
-              )}
-            </p>
-          </div>
-
-          <div className="text-right">
-            <div className={`text-5xl font-black ${batteryColor} flex items-baseline justify-end gap-1 drop-shadow-sm`}>
-              {data.soc != null ? data.soc.toFixed(0) : '--'}<span className="text-xl opacity-80">%</span>
-            </div>
-            <div className="text-slate-400 text-sm font-medium mt-1">
-              <span className="text-white font-bold">{data.estRange != null ? data.estRange.toFixed(0) : '--'}</span> km 
-              <span className="text-slate-600 text-xs ml-1">est.</span>
-            </div>
+      {/* HEADER: Vehicle Name & Doors Status */}
+      <div className="bg-slate-800 rounded-2xl p-5 border border-slate-700 shadow-xl">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold text-white tracking-tight">
+            {vehicleName || data.vehicleId || 'My BMW i3'}
+          </h2>
+          <div className="flex gap-1">
+            {doorStatuses.map((s, i) => (
+              <div key={i} className={`px-2 py-1 rounded-md text-[10px] flex items-center gap-1 border border-slate-600 ${s.color || 'bg-slate-900/50'}`}>
+                <span>{s.icon}</span>
+                <span className="font-bold text-slate-300 uppercase">{s.label}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Primary Metrics Grid */}
-        <div className="grid grid-cols-2 gap-4 pl-3">
-          <div className={`p-4 rounded-xl border backdrop-blur-sm transition-colors ${isCharging ? 'bg-green-900/10 border-green-500/20' : 'bg-slate-700/30 border-slate-700/50'}`}>
-            <p className="text-slate-400 text-[10px] uppercase tracking-wider font-bold mb-1">
-              {isCharging ? 'Charging' : 'Power'}
-            </p>
-            <div className="flex items-baseline gap-2">
-              <span className={`text-2xl font-mono font-bold ${isCharging ? 'text-green-400' : 'text-white'}`}>
-                {data.power != null ? data.power.toFixed(1) : '0.0'}
-              </span>
-              <span className="text-sm text-slate-500">kW</span>
-            </div>
-            {isCharging && data.i3PilotCurrent ? (
-               <div className="text-[10px] text-slate-500 mt-2 font-mono flex justify-between items-center">
-                 <span>Input: {data.i3PilotCurrent.toFixed(1)}A</span>
-                 <span className="h-3 w-px bg-slate-700"></span>
-                 <span>Ready: {data.i3Ready ? 'YES' : 'NO'}</span>
-               </div>
-            ) : (
-              <div className="text-xs text-slate-500 mt-2 font-mono flex justify-between items-center">
-                <span>{data.voltage != null ? data.voltage.toFixed(0) : '--'}V</span>
-                <span className="h-3 w-px bg-slate-700"></span>
-                <span>{data.current != null ? data.current.toFixed(1) : '--'}A</span>
-              </div>
-            )}
-          </div>
+        {/* DRIVE STATE & DURATION */}
+        <div className="flex items-center gap-3 bg-slate-900/40 p-3 rounded-xl border border-slate-700/50">
+          <div className={`w-3 h-3 rounded-full ${
+            state === VehicleState.Driving ? 'bg-blue-500 animate-pulse' : 
+            state === VehicleState.Asleep ? 'bg-purple-600' : 'bg-green-500'
+          }`}></div>
+          <span className="font-bold text-sm tracking-widest uppercase">{state}</span>
+          <span className="text-slate-500 text-xs">for {formatDuration(stateDuration)}</span>
+          {data.gear && <span className="ml-auto bg-slate-700 text-white font-mono font-bold px-2 py-0.5 rounded text-xs">{data.gear}</span>}
+        </div>
 
-          <div className="bg-slate-700/30 p-4 rounded-xl border border-slate-700/50 backdrop-blur-sm">
-            <p className="text-slate-400 text-[10px] uppercase tracking-wider font-bold mb-1">
-              {isDriving ? 'Speed' : 'Odometer'}
-            </p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-mono text-white font-bold">
-                 {isDriving ? (data.speed != null ? data.speed.toFixed(0) : '0') : (data.odometer != null ? Math.round(data.odometer) : '0')} 
-              </span>
-              <span className="text-sm text-slate-500">{isDriving ? 'km/h' : 'km'}</span>
+        {/* SOC & RANGE LARGE */}
+        <div className="flex justify-between items-end mt-6">
+          <div className="flex items-baseline gap-2">
+            <span className={`text-6xl font-black ${data.soc < 20 ? 'text-red-500' : 'text-green-400'}`}>
+              {Math.round(data.soc)}
+            </span>
+            <span className="text-2xl font-bold text-slate-500">%</span>
+          </div>
+          <div className="text-right">
+            <div className="text-4xl font-bold text-white">
+              {Math.round(data.rangeEst || 0)} <span className="text-lg text-slate-500">km</span>
             </div>
-             <div className="mt-2 pt-2 border-t border-slate-700/50 flex justify-between items-center text-xs">
-                {data.voltage12v != null ? (
-                   <div className="flex items-center gap-2" title="12V System">
-                     <span className="text-[10px] bg-slate-800 px-1 rounded">12V</span>
-                     <span className={`font-mono ${data.voltage12v < 12.0 ? 'text-red-400' : 'text-blue-300'}`}>
-                       {data.voltage12v.toFixed(1)}V
-                     </span>
-                     {data.current12v != null && (
-                       <span className={`font-mono text-[10px] ${data.current12v < 0 ? 'text-red-400' : 'text-green-400'}`}>
-                         {data.current12v > 0 ? '+' : ''}{data.current12v.toFixed(1)}A
-                       </span>
-                     )}
-                   </div>
-                ) : (
-                  <span className="text-[10px] text-slate-600">12V --</span>
-                )}
-             </div>
+            <div className="text-[10px] text-slate-400 uppercase font-bold tracking-tighter">Estimated Range</div>
           </div>
         </div>
       </div>
 
-      {/* Secondary Info Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Climate & Temps */}
-        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-sm">
-           <div className="flex justify-between items-center mb-3">
-             <h3 className="text-xs uppercase text-slate-400 font-bold flex items-center gap-2">
-               <span>🌡️</span> Temperatures
-             </h3>
-             <div className="flex items-center gap-3">
-               {data.tempAmbient != null && (
-                 <span className="text-xs text-slate-300 font-medium">Amb: <span className="text-white font-bold">{data.tempAmbient.toFixed(1)}°</span></span>
-               )}
-               {data.chargeTemp != null && (
-                 <span className="text-[10px] text-slate-500">Charger: {data.chargeTemp.toFixed(1)}°</span>
-               )}
-             </div>
-           </div>
-           
-           <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="bg-slate-900/50 rounded-lg p-2">
-                <div className="text-[10px] text-slate-500 mb-1">Inside</div>
-                <div className="text-white font-mono font-medium">{data.insideTemp != null ? data.insideTemp.toFixed(1) : '--'}°</div>
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-2">
-                <div className="text-[10px] text-slate-500 mb-1">Battery</div>
-                <div className={`${(data.tempBattery != null && (data.tempBattery > 35 || data.tempBattery < 5)) ? 'text-yellow-400' : 'text-blue-200'} font-mono font-medium`}>
-                  {data.tempBattery != null ? data.tempBattery.toFixed(1) : '--'}°
-                </div>
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-2">
-                <div className="text-[10px] text-slate-500 mb-1">Motor</div>
-                <div className="text-slate-300 font-mono font-medium">{data.tempMotor != null ? data.tempMotor.toFixed(1) : '--'}°</div>
-              </div>
-           </div>
+      {/* DASHBOARD / ODOMETER INFO */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
+          <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Power</div>
+          <div className="text-lg font-mono font-bold">{(data.power || 0).toFixed(1)} <span className="text-xs">kW</span></div>
+          <div className="text-[9px] text-slate-600 mt-1">{data.motorRpm || 0} RPM</div>
         </div>
+        <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
+          <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Consumption</div>
+          <div className="text-lg font-mono font-bold">{Math.round(data.consumptionInst || 0)} <span className="text-xs">Wh/km</span></div>
+          <div className="text-[9px] text-slate-600 mt-1">Instantaneous</div>
+        </div>
+        <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
+          <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Speed</div>
+          <div className="text-lg font-mono font-bold">{Math.round(data.speed || 0)} <span className="text-xs">km/h</span></div>
+          <div className="text-[9px] text-slate-600 mt-1">Current</div>
+        </div>
+        <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
+          <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Odometer</div>
+          <div className="text-lg font-mono font-bold">{Math.round(data.odometer || 0).toLocaleString()} <span className="text-xs">km</span></div>
+          <div className="text-[9px] text-slate-600 mt-1">Total Distance</div>
+        </div>
+      </div>
 
-        {/* GPS & SoH Status */}
-        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-sm">
-           <h3 className="text-xs uppercase text-slate-400 font-bold mb-3 flex items-center justify-between">
-             <span className="flex items-center gap-2"><span>🏎️</span> System Health</span>
-             {data.soh != null && <span className="text-[10px] text-green-400">Battery SoH: {data.soh}%</span>}
-           </h3>
-           
-           <div className="flex items-center justify-between h-12 px-2 text-xs">
-              <div className="flex items-center gap-4">
-                <div className="flex flex-col">
-                  <span className="text-slate-500 text-[9px] uppercase">GPS Status</span>
-                  <span className={data.gpsLock ? 'text-green-400' : 'text-red-400 font-bold'}>
-                    {data.gpsLock ? 'Locked' : 'Searching...'}
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-slate-500 text-[9px] uppercase">Satellites</span>
-                  <span className="text-white font-mono">{data.gpsSats || 0}</span>
-                </div>
-              </div>
-              {data.elevation != null && (
-                <div className="flex flex-col items-end">
-                   <span className="text-slate-500 text-[9px] uppercase">Elevation</span>
-                   <span className="text-white font-mono">{data.elevation.toFixed(0)}m</span>
-                </div>
-              )}
-           </div>
+      {/* CURRENT TRIP STATISTICS */}
+      <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700 shadow-lg">
+        <h3 className="text-xs font-black text-slate-500 uppercase mb-3 flex items-center gap-2">
+          <span className="w-1.5 h-3 bg-blue-500 rounded-full"></span> Current Trip Info
+        </h3>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="text-center">
+            <div className="text-[9px] text-slate-500 uppercase">Distance</div>
+            <div className="text-sm font-bold">{(data.tripDistance || 0).toFixed(1)} km</div>
+          </div>
+          <div className="text-center">
+            <div className="text-[9px] text-slate-500 uppercase">Avg Cons.</div>
+            <div className="text-sm font-bold">{Math.round(data.tripConsumptionAvg || 0)} Wh/km</div>
+          </div>
+          <div className="text-center">
+            <div className="text-[9px] text-slate-500 uppercase">Total Used</div>
+            <div className="text-sm font-bold">{(data.tripEnergyUsed || 0).toFixed(2)} kWh</div>
+          </div>
+          <div className="text-center">
+            <div className="text-[9px] text-slate-500 uppercase">Duration</div>
+            <div className="text-sm font-bold">{formatDuration(data.driveTime)}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-[9px] text-slate-500 uppercase">Avg Speed</div>
+            <div className="text-sm font-bold">{data.driveTime > 0 ? Math.round(data.tripDistance / (data.driveTime/3600)) : 0} km/h</div>
+          </div>
+        </div>
+      </div>
+
+      {/* BATTERY & ELECTRICAL */}
+      <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-xs font-black text-slate-500 uppercase">Battery & Charging</h3>
+          {isCharging && <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-bold">CHARGING</span>}
+          {isCharged && <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full font-bold">CHARGED</span>}
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">SoH</span>
+              <span className="text-green-400 font-bold">{data.soh}%</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">Voltage</span>
+              <span className="font-mono">{(data.voltage || 0).toFixed(1)}V</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">Current</span>
+              <span className="font-mono">{(data.current || 0).toFixed(1)}A</span>
+            </div>
+          </div>
+          <div className="space-y-2 border-l border-slate-700 pl-4">
+            <div className="flex justify-between text-xs font-bold text-blue-300">
+              <span className="text-slate-500 font-normal">12V Battery</span>
+              <span>{(data.voltage12v || 0).toFixed(1)}V</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">12V Current</span>
+              <span className="font-mono">{(data.current12v || 0).toFixed(1)}A</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* TEMPERATURE & VENTILATION */}
+      <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-xs font-black text-slate-500 uppercase">Climate & Temps</h3>
+          <div className="flex gap-2">
+            {data.acStatus && <span className="text-[9px] bg-blue-900/50 text-blue-300 px-1.5 rounded">AC ON</span>}
+            {data.ventMode && <span className="text-[9px] bg-slate-700 text-slate-400 px-1.5 rounded">{data.ventMode}</span>}
+          </div>
+        </div>
+        <div className="grid grid-cols-5 gap-1">
+          {[
+            { label: 'Ambient', val: data.tempAmbient, icon: '🌍' },
+            { label: 'Cabin', val: data.insideTemp, icon: '🛋️' },
+            { label: 'Battery', val: data.tempBattery, icon: '🔋' },
+            { label: 'Motor', val: data.tempMotor, icon: '⚙️' },
+            { label: 'Charger', val: data.chargerTemp, icon: '🔌' },
+          ].map((t, i) => (
+            <div key={i} className="text-center p-1 bg-slate-900/30 rounded-lg">
+              <div className="text-[14px]">{t.icon}</div>
+              <div className="text-[10px] text-white font-bold">{Math.round(t.val || 0)}°</div>
+              <div className="text-[7px] text-slate-500 uppercase">{t.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* REAL-TIME MAP INFO */}
+      <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-lg">📍</span>
+          <span className="text-sm font-bold text-white truncate flex-1">{data.locationName || 'Unknown Location'}</span>
+          <div className="text-right">
+             <div className="text-[9px] text-slate-500 uppercase">Elevation</div>
+             <div className="text-[10px] font-bold">{Math.round(data.elevation || 0)}m</div>
+          </div>
+        </div>
+        <div className="flex justify-between text-[10px] text-slate-500 mt-2 pt-2 border-t border-slate-700/50">
+          <span>GPS Quality: {data.gpsQuality}%</span>
+          <span>Satellites: {data.gpsSats || 0}</span>
         </div>
       </div>
     </div>

@@ -7,106 +7,128 @@ export enum VehicleState {
   Asleep = 'Asleep'
 }
 
-export interface TelemetryData {
-  vehicleId?: string;
-  timestamp: number;
-  
-  // Core
-  soc: number; 
-  soh?: number; 
-  capacity?: number; 
-  range: number; 
-  estRange: number; 
-  idealRange: number;
-  
-  // Driving
-  speed: number; 
-  odometer: number; 
-  
-  // Electrical
-  power: number; 
-  voltage: number; 
-  current: number; 
-  voltage12v?: number; 
-  current12v?: number; 
-  
-  // Charging
-  chargeState: string; 
-  chargeMode?: string;
-  chargeKwh?: number;
-  chargeTime?: number;
-  chargeTemp?: number;
-  chargePilot?: boolean;
-  chargeLimitSoc?: number;
-  chargeLimitRange?: number;
-  chargeType?: string;
-  
-  // Temps
-  tempBattery: number;
-  tempMotor: number;
-  tempAmbient: number;
-  insideTemp?: number;
-  outsideTemp?: number;
-  
-  // Location
-  latitude: number;
-  longitude: number;
-  elevation: number;
-  locationName?: string;
-  direction?: number;
-  gpsLock?: boolean;
-  gpsSats?: number;
-  
-  // Status
-  gear?: string;
-  locked?: boolean;
-  valet?: boolean;
-  carAwake?: boolean;
-  handbrake?: boolean;
-  parkTime?: number;
-  
-  // BMW i3 Custom Display Fields
-  i3PilotCurrent?: number;
-  i3LedState?: number;
-  i3PlugStatus?: string;
-  i3Ready?: boolean;
-  
-  rawMetrics?: Record<string, any>;
-  carMetrics?: Record<string, any>;
+// Added DrivePathPoint to support trajectory path in DriveSession
+export interface DrivePathPoint {
+  lat: number;
+  lng: number;
+  speed: number;
+  soc: number;
 }
 
+// Added DriveSession interface for drive tracking
 export interface DriveSession {
   id: string;
   startDate: string;
   endDate?: string;
-  distance: number; 
-  duration: number; 
-  consumption: number; 
-  efficiency: number; 
+  distance: number;
+  duration: number;
+  consumption: number;
+  efficiency: number;
   startSoc: number;
-  endSoc: number;
-  path: { lat: number; lng: number; speed: number; soc: number }[];
+  endSoc?: number;
+  path: DrivePathPoint[];
 }
 
+// Added ChargeChartPoint for charging visualization
+export interface ChargeChartPoint {
+  time: string;
+  power: number;
+  soc: number;
+}
+
+// Added ChargeSession interface for charging history
 export interface ChargeSession {
   id: string;
   date: string;
   endDate?: string;
   location: string;
   addedKwh: number;
-  duration: number; 
-  cost?: number;
-  avgPower: number; 
-  maxPower: number; 
-  startSoc?: number;
-  endSoc?: number;
-  chartData: { time: string; power: number; soc: number }[];
+  duration: number;
+  avgPower: number;
+  maxPower: number;
+  chartData: ChargeChartPoint[];
+}
+
+export interface TelemetryData {
+  vehicleId?: string;
+  timestamp: number;
+  
+  // Core (v.b.*)
+  soc: number; 
+  soh?: number; 
+  capacityAh?: number; 
+  rangeEst?: number; // Maps to xi3.v.b.range.bc
+  rangeIdeal?: number;
+  rangeFull?: number;
+  
+  // Driving (v.p.*)
+  speed: number; 
+  odometer: number; 
+  tripDistance: number; // v.p.trip
+  tripConsumptionAvg: number; // xi3.v.p.tripconsumption
+  consumptionInst: number; // v.b.consumption
+  motorRpm?: number; // v.m.rpm
+  tripEnergyUsed?: number; // v.b.energy.used
+  // Added direction property for map heading visualization
+  direction?: number; 
+  
+  // Electrical
+  power: number; // v.b.power
+  voltage: number; 
+  current: number; 
+  voltage12v?: number; 
+  current12v?: number; 
+  
+  // Charging (xi3.v.c.*)
+  chargeState: string; 
+  chargeKwh?: number;
+  chargeTemp?: number;
+  chargePilotA?: number; // xi3.v.c.pilotsignal
+  chargePlugStatus?: string; // xi3.v.c.chargeplugstatus
+  
+  // Temps & Vent
+  tempBattery: number;
+  tempMotor: number;
+  tempAmbient: number;
+  insideTemp?: number;
+  chargerTemp?: number; // v.c.temp
+  ventMode?: string; // v.e.cabinintake
+  acStatus?: boolean; // v.e.cooling
+  
+  // Location & GPS
+  latitude: number;
+  longitude: number;
+  elevation: number;
+  locationName?: string; // v.p.location
+  gpsSats?: number;
+  gpsQuality?: number; // v.p.gpssq
+  
+  // Status (v.e.*)
+  gear?: string;
+  locked?: boolean;
+  carOn?: boolean;
+  parkTime: number; // v.e.parktime
+  driveTime: number; // v.e.drivetime
+  lastUpdateAge: number; // xi3.s.age (mins)
+  
+  // Door Status (v.d.*)
+  doorFL?: boolean;
+  doorFR?: boolean;
+  doorRL?: boolean;
+  doorRR?: boolean;
+  doorHood?: boolean;
+  doorTrunk?: boolean;
+  doorChargePort?: boolean;
+  
+  rawMetrics?: Record<string, any>;
+  carMetrics?: Record<string, any>;
 }
 
 export interface OvmsConfig {
   supabaseUrl: string;
   supabaseKey: string;
   vehicleId: string;
+  vehicleName?: string; // Added vehicle name setting
   serverPassword?: string;
   serverUrl?: string;
 }

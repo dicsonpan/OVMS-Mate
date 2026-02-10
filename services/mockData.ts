@@ -9,7 +9,7 @@ const generatePath = (points: number) => {
   for (let i = 0; i < points; i++) {
     lat += (Math.random() - 0.5) * 0.01;
     lng += (Math.random() - 0.5) * 0.01;
-    path.push({ lat, lng, speed: 20 + Math.random() * 60 });
+    path.push({ lat, lng, speed: 20 + Math.random() * 60, soc: 80 - (i * 0.5) });
   }
   return path;
 };
@@ -88,9 +88,8 @@ export const getLiveTelemetry = (): TelemetryData => {
   return {
     timestamp: Date.now(),
     soc: 72,
-    range: 184,
-    estRange: 184,
-    idealRange: 200,
+    rangeEst: 184,
+    rangeIdeal: 200,
     speed: 0,
     power: -0.2, // Vampire drain
     voltage: 365,
@@ -103,6 +102,16 @@ export const getLiveTelemetry = (): TelemetryData => {
     latitude: 37.7749,
     longitude: -122.4194,
     elevation: 45,
-    locationName: "Home Garage"
+    locationName: "Home Garage",
+    carOn: true,
+    locked: true,
+    // Fix: Adding missing properties required by TelemetryData interface
+    tripDistance: 0,
+    tripConsumptionAvg: 0,
+    consumptionInst: 0,
+    parkTime: 0,
+    driveTime: 0,
+    lastUpdateAge: 0,
+    direction: 0
   };
 };
