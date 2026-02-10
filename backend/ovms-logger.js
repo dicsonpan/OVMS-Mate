@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import mqtt from 'mqtt';
 
 console.log('================================================');
-console.log('   OVMS MATE LOGGER - i3 DRIVE TRACKER v2.0    ');
+console.log('   OVMS MATE LOGGER - i3 DRIVE TRACKER v2.1    ');
 console.log('================================================');
 
 const CONFIG = {
@@ -50,6 +50,8 @@ let currentState = {
 const DB_MAP = {
   'v.b.soc': 'soc',
   'v.b.soh': 'soh',
+  'v.b.capacity': 'capacity', // Added: Usable capacity in kWh
+  'v.b.cac': 'cac',           // Added: Calculated Amp-hours
   'v.b.voltage': 'voltage',
   'v.b.current': 'current',
   'v.b.power': 'power',
@@ -125,16 +127,12 @@ client.on('message', (topic, message) => {
 const processDriveLogic = async () => {
   const now = Date.now();
   const speed = currentState.speed || 0;
-  const gear = currentState.gear; // '0'=Neutral, negative=Reverse, 1+=Drive usually. 'P' is sometimes distinct or derived.
-  // NOTE: OVMS often reports Gear as number. 0 might be park/neutral.
-  // Reliable "Parked" check: Speed is 0 and (Gear is Park OR car is Locked/Off).
-  // For simplicity here: If speed > 0, we are definitely driving.
   
   const isMoving = speed > 0;
   
   // 1. START CONDITION: Car starts moving
   if (!activeDrive && isMoving) {
-    console.log(`🚗 Drive Started! Odo: ${currentState.odometer}`);
+    console.log(`🚗 Drive Started! Odo: ${currentState.odometer}, SoC: ${currentState.soc}%`);
     activeDrive = {
       startTime: now,
       startOdo: currentState.odometer,
@@ -188,7 +186,6 @@ const processDriveLogic = async () => {
 
 const finalizeDrive = async (drive) => {
   // Logic 3: End time is "now" minus the 15 min cooldown
-  // Because the car actually stopped 15 mins ago.
   const realEndTime = drive.cooldownStartTime || Date.now();
   const endOdo = currentState.odometer;
   const distance = endOdo - drive.startOdo;
@@ -202,10 +199,29 @@ const finalizeDrive = async (drive) => {
   const durationMin = (realEndTime - drive.startTime) / 1000 / 60;
   const endSoc = currentState.soc;
   
-  // Calculate consumption (Energy used)
-  // We can try to use trip_energy from OVMS if valid, or estimate based on SoC % if capacity known.
-  // Using OVMS reported trip energy if available, else 0
-  const energyUsed = currentState.tripEnergyUsed || 0; 
+  // --- ENERGY CALCULATION UPDATE ---
+  // Formula: (StartSoC - EndSoC) * TotalCapacity
+  // We prefer 'v.b.capacity' (kWh) which is the BMS reported usable capacity.
+  // If not available, we estimate using 'v.b.cac' (Ah) * 360V (Nominal Voltage for i3) / 1000.
+  
+  let packCapacityKwh = currentState.capacity;
+  if (!packCapacityKwh && currentState.cac) {
+     // Fallback: Estimate kWh from Ah. 
+     // i3 60Ah ~ 360V, 94Ah ~ 352V, 120Ah ~ 352V nominal. Using 360V as a safe general multiplier.
+     packCapacityKwh = (currentState.cac * 360) / 1000;
+  }
+  // Ultimate fallback if metrics missing (assume 120Ah / 40kWh model as default)
+  if (!packCapacityKwh) packCapacityKwh = 37.9;
+
+  const deltaSoc = drive.startSoc - endSoc;
+  
+  // Calculate Energy Used (kWh)
+  // We use Math.max(0, ...) to avoid negative consumption on downhill-only short trips (regen), 
+  // though physically it is negative energy, usually drives show 0 or positive consumption.
+  let energyUsed = (deltaSoc / 100) * packCapacityKwh;
+  
+  // If negative (net regen), we can either store negative or 0. TeslaMate usually stores 0 or net.
+  // Let's keep the signed value if it's significant, but usually trips consume energy.
   
   // Calculate efficiency (Wh/km)
   let efficiency = 0;
@@ -221,12 +237,12 @@ const finalizeDrive = async (drive) => {
     duration: durationMin,
     start_soc: drive.startSoc,
     end_soc: endSoc,
-    consumption: energyUsed, // kWh
+    consumption: energyUsed, // Calculated from SoC delta
     efficiency: efficiency, // Wh/km
     path: drive.path
   };
 
-  console.log(`✅ Drive Finished! Dist: ${distance.toFixed(2)}km, Dur: ${durationMin.toFixed(0)}m`);
+  console.log(`✅ Drive Finished! Dist: ${distance.toFixed(2)}km, Energy: ${energyUsed.toFixed(2)}kWh (Cap: ${packCapacityKwh.toFixed(1)}kWh)`);
   
   if (supabase) {
     const { error } = await supabase.from('drives').insert(drivePayload);

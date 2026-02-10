@@ -179,10 +179,10 @@ const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
         </div>
       </div>
 
-      {/* CURRENT TRIP INFO - TESLAMATE STYLE */}
+      {/* TRIP COMPUTER INFO */}
       <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
         <h3 className="text-xs font-black text-slate-500 uppercase mb-4 flex items-center gap-2">
-          <span className="w-1.5 h-3 bg-blue-500 rounded-full"></span> Current Trip Info
+          <span className="w-1.5 h-3 bg-blue-500 rounded-full"></span> Trip Computer Info
         </h3>
         <div className="grid grid-cols-2 gap-y-4 gap-x-2">
            {/* Duration */}
