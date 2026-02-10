@@ -7,10 +7,12 @@ interface StatusCardProps {
   vehicleName?: string;
 }
 
+// TeslaMate-style duration format: HH:MM
 const formatDuration = (seconds: number) => {
+  if (!seconds && seconds !== 0) return '--:--';
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  return `${h > 0 ? h + 'h ' : ''}${m}m`;
+  return `${h}:${m.toString().padStart(2, '0')}`;
 };
 
 const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
@@ -42,6 +44,11 @@ const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
     { label: 'Hood', val: data.doorHood, icon: '🚘' },
     { label: 'Trunk', val: data.doorTrunk, icon: '📦' },
   ].filter(s => s.val !== undefined && (s.label === 'Locked' || s.val === true));
+
+  // 4. Trip Calculations
+  // Calculate Avg Speed based on Trip Distance / Trip Duration (converted to hours)
+  const tripDurationHours = data.driveTime / 3600;
+  const avgSpeed = tripDurationHours > 0.01 ? (data.tripDistance / tripDurationHours) : data.speed;
 
   return (
     <div className="space-y-4">
@@ -111,7 +118,7 @@ const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
         </div>
       </div>
 
-      {/* TEMPERATURE & VENTILATION (Moved Up) */}
+      {/* TEMPERATURE & VENTILATION */}
       <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
         <div className="flex justify-between items-center mb-3">
           <h3 className="text-xs font-black text-slate-500 uppercase">Climate & Temps</h3>
@@ -172,32 +179,43 @@ const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
         </div>
       </div>
 
-      {/* CURRENT TRIP STATISTICS (Moved Down) */}
-      <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700 shadow-lg">
-        <h3 className="text-xs font-black text-slate-500 uppercase mb-3 flex items-center gap-2">
+      {/* CURRENT TRIP INFO - TESLAMATE STYLE */}
+      <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-lg">
+        <h3 className="text-xs font-black text-slate-500 uppercase mb-4 flex items-center gap-2">
           <span className="w-1.5 h-3 bg-blue-500 rounded-full"></span> Current Trip Info
         </h3>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="text-center">
-            <div className="text-[9px] text-slate-500 uppercase">Distance</div>
-            <div className="text-sm font-bold">{(data.tripDistance || 0).toFixed(1)} km</div>
-          </div>
-          <div className="text-center">
-            <div className="text-[9px] text-slate-500 uppercase">Avg Cons.</div>
-            <div className="text-sm font-bold">{Math.round(data.tripConsumptionAvg || 0)} Wh/km</div>
-          </div>
-          <div className="text-center">
-            <div className="text-[9px] text-slate-500 uppercase">Total Used</div>
-            <div className="text-sm font-bold">{(data.tripEnergyUsed || 0).toFixed(2)} kWh</div>
-          </div>
-          <div className="text-center">
-            <div className="text-[9px] text-slate-500 uppercase">Duration</div>
-            <div className="text-sm font-bold">{formatDuration(data.driveTime)}</div>
-          </div>
-          <div className="text-center">
-            <div className="text-[9px] text-slate-500 uppercase">Avg Speed</div>
-            <div className="text-sm font-bold">{data.driveTime > 0 ? Math.round(data.tripDistance / (data.driveTime/3600)) : 0} km/h</div>
-          </div>
+        <div className="grid grid-cols-2 gap-y-4 gap-x-2">
+           {/* Duration */}
+           <div className="flex flex-col">
+              <span className="text-[10px] text-slate-500 uppercase font-bold">Duration</span>
+              <span className="text-2xl font-mono text-white">{formatDuration(data.driveTime)} <span className="text-xs font-sans text-slate-500 font-normal">min</span></span>
+           </div>
+
+           {/* Distance */}
+           <div className="flex flex-col">
+              <span className="text-[10px] text-slate-500 uppercase font-bold">Distance</span>
+              <span className="text-2xl font-mono text-white">{(data.tripDistance || 0).toFixed(1)} <span className="text-xs font-sans text-slate-500 font-normal">km</span></span>
+           </div>
+
+           {/* Avg Speed */}
+           <div className="flex flex-col">
+              <span className="text-[10px] text-slate-500 uppercase font-bold">Avg Speed</span>
+              <span className="text-xl font-mono text-white">{avgSpeed.toFixed(0)} <span className="text-xs font-sans text-slate-500 font-normal">km/h</span></span>
+           </div>
+
+           {/* Consumption */}
+           <div className="flex flex-col">
+              <span className="text-[10px] text-slate-500 uppercase font-bold">Avg Consumption</span>
+              <span className="text-xl font-mono text-white">{Math.round(data.tripConsumptionAvg || 0)} <span className="text-xs font-sans text-slate-500 font-normal">Wh/km</span></span>
+           </div>
+
+           {/* Total Energy */}
+           <div className="flex flex-col col-span-2 border-t border-slate-700 mt-2 pt-2">
+              <div className="flex justify-between items-baseline">
+                <span className="text-[10px] text-slate-500 uppercase font-bold">Total Energy Used</span>
+                <span className="text-lg font-mono text-white">{(data.tripEnergyUsed || 0).toFixed(2)} <span className="text-xs font-sans text-slate-500 font-normal">kWh</span></span>
+              </div>
+           </div>
         </div>
       </div>
 

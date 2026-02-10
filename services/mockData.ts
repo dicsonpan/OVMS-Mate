@@ -90,10 +90,10 @@ export const getLiveTelemetry = (): TelemetryData => {
     soc: 72,
     rangeEst: 184,
     rangeIdeal: 200,
-    speed: 0,
-    power: -0.2, // Vampire drain
+    speed: 45, // Simulating moving car
+    power: 12.5, // Positive power usually means consumption for drivetrain
     voltage: 365,
-    current: 0.5,
+    current: 34.2,
     chargeState: 'stopped',
     odometer: 45231,
     tempBattery: 22,
@@ -102,16 +102,17 @@ export const getLiveTelemetry = (): TelemetryData => {
     latitude: 37.7749,
     longitude: -122.4194,
     elevation: 45,
-    locationName: "Home Garage",
+    locationName: "Downtown Dr",
     carOn: true,
     locked: true,
-    // Fix: Adding missing properties required by TelemetryData interface
-    tripDistance: 0,
-    tripConsumptionAvg: 0,
-    consumptionInst: 0,
+    // Realistic trip accumulation values
+    tripDistance: 15.5, // km
+    tripConsumptionAvg: 145, // Wh/km
+    consumptionInst: 145,
     parkTime: 0,
-    driveTime: 0,
+    driveTime: 1250, // approx 20 mins
+    tripEnergyUsed: 2.24, // kWh
     lastUpdateAge: 0,
-    direction: 0
+    direction: 45
   };
 };
