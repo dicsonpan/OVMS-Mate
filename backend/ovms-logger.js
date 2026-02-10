@@ -1,9 +1,10 @@
 
 import { createClient } from '@supabase/supabase-js';
 import mqtt from 'mqtt';
+import crypto from 'crypto';
 
 console.log('================================================');
-console.log('   OVMS MATE LOGGER - i3 DRIVE & CHARGE v2.3   ');
+console.log('   OVMS MATE LOGGER - i3 DRIVE & CHARGE v2.5   ');
 console.log('================================================');
 
 const CONFIG = {
@@ -20,10 +21,12 @@ const CONFIG = {
 const DRIVE_COOLDOWN_MS = 15 * 60 * 1000; 
 const MIN_DRIVE_DISTANCE_KM = 0.1;
 const MIN_CHARGE_DURATION_MIN = 1; 
+const CHARGE_HEARTBEAT_INTERVAL_MS = 60000; // Send 'stat' command if silence > 60s during charging
 
 // --- STATE MACHINES ---
 let activeDrive = null; 
 let activeCharge = null;
+let lastMsgTime = Date.now(); // Track silence
 
 const supabase = (CONFIG.supabaseUrl && CONFIG.supabaseKey) 
   ? createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey) 
@@ -41,15 +44,18 @@ let currentState = {
 
 // Mapping MQTT topics to internal state keys
 const DB_MAP = {
+  // Battery
   'v.b.soc': 'soc',
   'v.b.soh': 'soh',
-  'v.b.capacity': 'capacity', // Usable capacity (kWh)
-  'v.b.cac': 'cac',           // Calculated Capacity (Ah)
+  'v.b.capacity': 'capacity',
+  'v.b.cac': 'cac',           
   'v.b.voltage': 'voltage',
   'v.b.current': 'current',
   'v.b.power': 'power',
   'v.b.consumption': 'consumptionInst',
   'v.b.energy.used': 'tripEnergyUsed',
+  
+  // Driving
   'v.p.speed': 'speed',
   'v.p.odometer': 'odometer',
   'v.p.trip': 'tripDistance',
@@ -64,6 +70,8 @@ const DB_MAP = {
   'v.p.latitude': 'latitude',
   'v.p.longitude': 'longitude',
   'v.p.location': 'locationName',
+  
+  // Temps
   'v.e.temp': 'temp_ambient',
   'v.b.temp': 'temp_battery',
   'v.m.temp': 'temp_motor',
@@ -72,8 +80,12 @@ const DB_MAP = {
   'v.c.temp': 'chargerTemp',
   'v.e.cabinintake': 'ventMode',
   'v.e.cooling': 'acStatus',
+  
+  // 12V
   'v.b.12v.current': 'v12current',
   'v.b.12v.voltage': 'v12voltage',
+  
+  // Doors
   'v.d.cp': 'doorChargePort',
   'v.d.fl': 'doorFL',
   'v.d.fr': 'doorFR',
@@ -81,12 +93,19 @@ const DB_MAP = {
   'v.d.rr': 'doorRR',
   'v.d.hood': 'doorHood',
   'v.d.trunk': 'doorTrunk',
+  
+  // i3 Specifics
   'xi3.v.b.range.bc': 'rangeEst',
   'xi3.s.age': 'lastUpdateAge',
-  'xi3.v.c.pilotsignal': 'chargePilotA',       // <--- Critical for i3
-  'xi3.v.c.chargeplugstatus': 'chargePlugStatus', // <--- Critical for i3
+  'xi3.v.c.pilotsignal': 'chargePilotA',       
+  'xi3.v.c.chargeplugstatus': 'chargePlugStatus', 
   'xi3.v.c.readytocharge': 'readyToCharge',
-  'xi3.v.p.tripconsumption': 'tripConsumptionAvg'
+  'xi3.v.p.tripconsumption': 'tripConsumptionAvg',
+
+  // Standard Charging (Fallback/Primary)
+  'v.c.charging': 'isChargingStandard',
+  'v.c.state': 'chargeStateStandard',
+  'v.c.kwh': 'chargeKwhAdded'
 };
 
 const parseValue = (val) => {
@@ -94,17 +113,29 @@ const parseValue = (val) => {
   const lval = val.toLowerCase().trim();
   if (['yes', 'true', 'connected', 'online'].includes(lval)) return true;
   if (['no', 'false', 'not connected', 'offline'].includes(lval)) return false;
+  // Try to parse number
   const match = val.match(/(-?\d+(\.\d+)?)/);
+  // Only return number if it matches, otherwise return original string
+  // This allows "Type 2" or "charging" to pass through as strings
   return match ? parseFloat(match[0]) : val.trim();
 };
 
 client.on('message', (topic, message) => {
+  lastMsgTime = Date.now(); // Update silence tracker
+  
   const metricPath = topic.split('/metric/')[1];
   if (!metricPath) return;
   const key = metricPath.replace(/\//g, '.');
   const rawValue = message.toString();
-  const val = parseValue(rawValue);
   
+  // Special handling: Keep v.c.state / chargeplugstatus as strings if they are not bools
+  let val = parseValue(rawValue);
+  
+  // Preserve string status for debugging if parseValue turned it into a partial number (rare but possible)
+  if (key === 'xi3.v.c.chargeplugstatus' && typeof val === 'number') {
+     val = rawValue; 
+  }
+
   const field = DB_MAP[key];
   if (field) currentState[field] = val;
   
@@ -113,22 +144,31 @@ client.on('message', (topic, message) => {
   currentState.isDirty = true;
 });
 
-// Helper to get Pack Capacity (kWh)
-// i3 60Ah ~ 18.8kWh usable, 94Ah ~ 27.2kWh, 120Ah ~ 37.9kWh
-const getPackCapacity = () => {
-  // If v.b.capacity (kWh) is reported by OVMS, use it.
-  if (currentState.capacity) return currentState.capacity;
+// --- HELPER: Send Heartbeat ---
+const sendActiveHeartbeat = () => {
+  if (!client.connected) return;
   
-  // Otherwise estimate from CAC (Ah). Nominal voltage ~360V for i3.
+  // Generate a random UUID for the command ID
+  const uuid = crypto.randomUUID();
+  const clientId = 'ovms-mate-logger';
+  const topic = `ovms/${CONFIG.mqttUser}/${CONFIG.vehicleId}/client/${clientId}/command/${uuid}`;
+  
+  // 'stat' command forces OVMS to re-read and publish status
+  client.publish(topic, 'stat');
+  console.log('💓 Active Charge Heartbeat: Sent "stat" command to keep session alive');
+};
+
+const getPackCapacity = () => {
+  if (currentState.capacity) return currentState.capacity;
   if (currentState.cac) {
      return (currentState.cac * 360) / 1000;
   }
-  return 37.9; // Default fallback (120Ah model)
+  return 37.9; 
 };
 
 // --- DRIVE PROCESSOR ---
 const processDriveLogic = async () => {
-  if (activeCharge) return; // Don't drive if charging
+  if (activeCharge) return; 
 
   const now = Date.now();
   const speed = currentState.speed || 0;
@@ -148,7 +188,6 @@ const processDriveLogic = async () => {
   if (activeDrive) {
     if (currentState.latitude && currentState.longitude) {
        const lastPoint = activeDrive.path[activeDrive.path.length - 1];
-       // Sample points every 5 seconds or if missing
        if (!lastPoint || (now - lastPoint.ts > 5000)) { 
          activeDrive.path.push({
            ts: now,
@@ -206,29 +245,39 @@ const finalizeDrive = async (drive) => {
 
 // --- CHARGE PROCESSOR ---
 const processChargeLogic = async () => {
-  if (activeDrive) return; // Don't charge if driving
+  if (activeDrive) return; 
 
   const now = Date.now();
   
-  // 1. Determine Status based on i3 signals
-  // xi3.v.c.chargeplugstatus: "Connected" (Case sensitive usually, but parseValue handles lower)
-  // xi3.v.c.pilotsignal: > 0A
+  // --- Charging Detection Logic ---
   
-  const plugStatus = currentState.chargePlugStatus;
+  // 1. i3 Specific Signals
+  const plugStatus = currentState.chargePlugStatus; // Expected: "Connected", "Type 2", etc.
   const pilotSignal = currentState.chargePilotA || 0;
-  const readyToCharge = currentState.readyToCharge; // boolean from parseValue
+  // const readyToCharge = currentState.readyToCharge; 
 
-  const isConnected = plugStatus === true || plugStatus === 'Connected';
-  const hasPower = pilotSignal > 0;
+  // Check if plugStatus contains "Connected" or is boolean true (insensitive check)
+  const isPlugConnected = plugStatus === true || 
+                          (typeof plugStatus === 'string' && plugStatus.toLowerCase().includes('connect'));
   
-  const isCharging = isConnected && hasPower;
+  const isI3Charging = isPlugConnected && pilotSignal > 0;
+
+  // 2. Standard OVMS Signals (v.c.charging / v.c.state)
+  const isStandardCharging = currentState.isChargingStandard === true;
+  const isStateCharging = currentState.chargeStateStandard === 'charging';
+
+  // Combined Condition
+  const isCharging = isI3Charging || isStandardCharging || isStateCharging;
   
-  // End conditions: Pilot=0 OR Ready=No OR Plug!=Connected
-  const isStopped = (pilotSignal === 0) || (readyToCharge === false) || (!isConnected);
+  // Stop Condition
+  // If we started, we stop when ALL indications are false/stopped
+  const isStopped = (!isPlugConnected && !isStandardCharging && !isStateCharging) || 
+                    (isPlugConnected && pilotSignal === 0 && !isStandardCharging && !isStateCharging);
 
   // START
   if (!activeCharge && isCharging) {
-    console.log(`⚡ Charging Started! SoC: ${currentState.soc}%`);
+    console.log(`⚡ Charging Started!`);
+    
     activeCharge = {
       startTime: now,
       startSoc: currentState.soc,
@@ -244,7 +293,15 @@ const processChargeLogic = async () => {
 
   // UPDATE
   if (activeCharge) {
-    // Power is usually negative during charge in v.b.power, but we want absolute for charts
+    // --- Heartbeat Logic ---
+    // If we believe we are charging, but haven't heard from the car in > 60s,
+    // sending a 'stat' command to wake up OVMS reporting logic.
+    if ((now - lastMsgTime) > CHARGE_HEARTBEAT_INTERVAL_MS) {
+        sendActiveHeartbeat();
+        // Reset timer locally to avoid spamming if network is just slow
+        lastMsgTime = now; 
+    }
+
     const rawPower = currentState.power || 0;
     const absPower = Math.abs(rawPower);
     
@@ -252,20 +309,20 @@ const processChargeLogic = async () => {
     activeCharge.powerSum += absPower;
     activeCharge.samples++;
     
-    // Throttle chart points: Record every minute
+    // Log sample data
     const lastPoint = activeCharge.chartData[activeCharge.chartData.length - 1];
     if (!lastPoint || (now - lastPoint.timestamp > 60000)) {
       activeCharge.chartData.push({
         time: new Date(now).toISOString(),
         timestamp: now,
-        power: absPower, // Record absolute power
+        power: absPower, 
         soc: currentState.soc
       });
     }
 
     // END
     if (isStopped) {
-      console.log(`⚡ Charging Stopped. Pilot: ${pilotSignal}, Plug: ${plugStatus}`);
+      console.log(`⚡ Charging Stopped.`);
       await finalizeCharge(activeCharge);
       activeCharge = null;
     }
@@ -276,7 +333,6 @@ const finalizeCharge = async (charge) => {
   const endTime = Date.now();
   const durationMin = (endTime - charge.startTime) / 1000 / 60;
   
-  // 7. Auto Filter: Remove duration < 1 min
   if (durationMin < MIN_CHARGE_DURATION_MIN) {
      console.log(`🗑️ Charge discarded (Duration ${durationMin.toFixed(1)} min < 1 min)`);
      return;
@@ -285,9 +341,13 @@ const finalizeCharge = async (charge) => {
   const endSoc = currentState.soc;
   const packCap = getPackCapacity();
   
-  // 3. Energy Calculation: (EndSoC - StartSoC) * Capacity
   let addedKwh = ((endSoc - charge.startSoc) / 100) * packCap;
   if (addedKwh < 0) addedKwh = 0; 
+  
+  // If standard metric v.c.kwh is available (energy added this session), prefer that
+  if (currentState.chargeKwhAdded && currentState.chargeKwhAdded > 0) {
+      addedKwh = currentState.chargeKwhAdded;
+  }
 
   const avgPower = charge.samples > 0 ? (charge.powerSum / charge.samples) : 0;
 
