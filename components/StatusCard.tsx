@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { VehicleState, TelemetryData } from '../types';
 
 interface StatusCardProps {
@@ -16,6 +16,60 @@ const formatDuration = (seconds: number) => {
 };
 
 const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
+  const [displayLocation, setDisplayLocation] = useState<string>('Locating...');
+
+  // Effect to handle Location logic (OVMS Name vs Reverse Geocoding)
+  useEffect(() => {
+    if (!data) return;
+
+    // 1. Priority: Use OVMS Location Name if defined (e.g. "Home", "Office")
+    if (data.locationName && data.locationName.trim() !== '') {
+      setDisplayLocation(data.locationName);
+      return;
+    }
+
+    // 2. Fallback: Use Coordinates to fetch address (Reverse Geocoding)
+    if (data.latitude && data.longitude) {
+      // Simple debounce check or cache could be added here in a real app
+      // Using OpenStreetMap Nominatim (Free, no key required for low volume)
+      const fetchAddress = async () => {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${data.latitude}&lon=${data.longitude}&zoom=18&addressdetails=1`,
+            { headers: { 'User-Agent': 'OVMS-Mate/1.0' } }
+          );
+          if (!res.ok) throw new Error('Geocoding failed');
+          
+          const json = await res.json();
+          if (json.address) {
+            const { road, house_number, suburb, city, town, village, residential, pedestrian } = json.address;
+            
+            // Construct address: "Road 123, City"
+            const streetName = road || pedestrian || residential || '';
+            const streetNum = house_number ? ` ${house_number}` : '';
+            const areaName = city || town || village || suburb || '';
+            
+            let fullAddr = '';
+            if (streetName) fullAddr += `${streetName}${streetNum}`;
+            
+            // If we have both street and area, add comma. If only area (e.g. in a park), just area.
+            if (fullAddr && areaName) fullAddr += `, ${areaName}`;
+            else if (!fullAddr && areaName) fullAddr = areaName;
+
+            setDisplayLocation(fullAddr || `${data.latitude.toFixed(5)}, ${data.longitude.toFixed(5)}`);
+          }
+        } catch (error) {
+          // If fetch fails, fallback to coordinates
+          setDisplayLocation(`${data.latitude.toFixed(5)}, ${data.longitude.toFixed(5)}`);
+        }
+      };
+      
+      fetchAddress();
+    } else {
+        setDisplayLocation("Unknown Location");
+    }
+  }, [data?.locationName, data?.latitude, data?.longitude]);
+
   if (!data) return null;
 
   // 1. Driving State Logic
@@ -204,7 +258,7 @@ const StatusCard: React.FC<StatusCardProps> = ({ data, vehicleName }) => {
       <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-lg">📍</span>
-          <span className="text-sm font-bold text-white truncate flex-1">{data.locationName || 'Unknown Location'}</span>
+          <span className="text-sm font-bold text-white truncate flex-1">{displayLocation}</span>
           <div className="text-right">
              <div className="text-[9px] text-slate-500 uppercase">Elevation</div>
              <div className="text-[10px] font-bold">{Math.round(data.elevation || 0)}m</div>
