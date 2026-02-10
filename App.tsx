@@ -6,13 +6,12 @@ import DriveList from './components/DriveList';
 import ChargingStats from './components/ChargingStats';
 import LiveMap from './components/LiveMap';
 import { VehicleState, TelemetryData, OvmsConfig, DriveSession, ChargeSession } from './types';
-import { fetchLatestTelemetry, fetchDrives, fetchCharges } from './services/dataService';
+import { fetchLatestTelemetry, fetchCharges } from './services/dataService';
 import { isSupabaseConfigured } from './services/supabaseClient';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
-  const [drives, setDrives] = useState<DriveSession[]>([]);
   const [charges, setCharges] = useState<ChargeSession[]>([]);
   
   // Map State
@@ -46,8 +45,6 @@ const App: React.FC = () => {
     const loadData = async () => {
        const t = await fetchLatestTelemetry();
        setTelemetry(t);
-       const d = await fetchDrives();
-       setDrives(d);
        const c = await fetchCharges();
        setCharges(c);
     };
@@ -112,7 +109,7 @@ const App: React.FC = () => {
       case 'drives':
         return (
           <div className="p-4 max-w-lg mx-auto">
-            <DriveList drives={drives} onViewMap={handleViewDriveMap} />
+            <DriveList onViewMap={handleViewDriveMap} />
           </div>
         );
       case 'charging':

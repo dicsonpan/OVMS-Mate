@@ -70,14 +70,35 @@ export const fetchLatestTelemetry = async (): Promise<TelemetryData> => {
   return getLiveTelemetry();
 };
 
-export const fetchDrives = async (): Promise<DriveSession[]> => {
+interface FetchDrivesOptions {
+  limit?: number;
+  offset?: number;
+  startDate?: string;
+  endDate?: string;
+}
+
+export const fetchDrives = async (options: FetchDrivesOptions = {}): Promise<DriveSession[]> => {
+  const { limit = 10, offset = 0, startDate, endDate } = options;
+
   if (isSupabaseConfigured() && supabase) {
     try {
-      const { data } = await supabase
+      let query = supabase
         .from('drives')
         .select('*')
-        .order('start_date', { ascending: false })
-        .limit(30);
+        .order('start_date', { ascending: false });
+
+      if (startDate) {
+        // Start of the day for start date
+        query = query.gte('start_date', `${startDate}T00:00:00.000Z`);
+      }
+      if (endDate) {
+        // End of the day for end date
+        query = query.lte('start_date', `${endDate}T23:59:59.999Z`);
+      }
+
+      query = query.range(offset, offset + limit - 1);
+
+      const { data } = await query;
         
       if (data) return data.map((d: any) => ({
           id: d.id,
@@ -93,7 +114,20 @@ export const fetchDrives = async (): Promise<DriveSession[]> => {
       })) as DriveSession[];
     } catch (e) { console.warn("Fetch drives failed:", e); }
   }
-  return MOCK_DRIVES;
+
+  // Fallback / Mock Data filtering simulation
+  let filteredMock = [...MOCK_DRIVES];
+  if (startDate) {
+    filteredMock = filteredMock.filter(d => new Date(d.startDate) >= new Date(startDate));
+  }
+  if (endDate) {
+    filteredMock = filteredMock.filter(d => new Date(d.startDate) <= new Date(`${endDate}T23:59:59Z`));
+  }
+  // Sort descending
+  filteredMock.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+  
+  // Pagination
+  return filteredMock.slice(offset, offset + limit);
 };
 
 export const fetchCharges = async (): Promise<ChargeSession[]> => {

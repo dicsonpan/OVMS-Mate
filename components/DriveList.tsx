@@ -1,17 +1,86 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DriveSession } from '../types';
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { analyzeDriveEfficiency } from '../services/geminiService';
+import { fetchDrives } from '../services/dataService';
 
 interface DriveListProps {
-  drives: DriveSession[];
+  // Drives are now fetched internally, no longer passed as props
   onViewMap: (drive: DriveSession) => void;
 }
 
-const DriveList: React.FC<DriveListProps> = ({ drives, onViewMap }) => {
+const PAGE_SIZE = 10;
+
+const DriveList: React.FC<DriveListProps> = ({ onViewMap }) => {
+  const [drives, setDrives] = useState<DriveSession[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
+  
+  // Filter States
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // Analysis States
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<{id: string, text: string} | null>(null);
+
+  // Initial Load
+  useEffect(() => {
+    loadDrives(true);
+  }, []);
+
+  const loadDrives = async (reset = false) => {
+    setLoading(true);
+    const currentPage = reset ? 0 : page;
+    const currentOffset = currentPage * PAGE_SIZE;
+
+    const newDrives = await fetchDrives({
+      limit: PAGE_SIZE,
+      offset: currentOffset,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined
+    });
+
+    if (reset) {
+      setDrives(newDrives);
+      setPage(1);
+    } else {
+      setDrives(prev => [...prev, ...newDrives]);
+      setPage(prev => prev + 1);
+    }
+
+    if (newDrives.length < PAGE_SIZE) {
+      setHasMore(false);
+    } else {
+      setHasMore(true);
+    }
+    setLoading(false);
+  };
+
+  const handleFilter = () => {
+    loadDrives(true);
+  };
+
+  const handleReset = () => {
+    setStartDate('');
+    setEndDate('');
+    // We need to trigger loadDrives after state update, but state update is async.
+    // simpler to just call fetch with empty params directly here or use effect dependency (but that triggers on every keystroke)
+    // Let's force a reload with empty params
+    setTimeout(() => {
+        // Hacky way to ensure state is cleared for the fetch, 
+        // essentially we just want to reload without filters.
+        setLoading(true);
+        fetchDrives({ limit: PAGE_SIZE, offset: 0 }).then(data => {
+            setDrives(data);
+            setPage(1);
+            setHasMore(data.length >= PAGE_SIZE);
+            setLoading(false);
+        });
+    }, 0);
+  };
 
   const handleAnalyze = async (drive: DriveSession) => {
     setAnalyzingId(drive.id);
@@ -28,6 +97,12 @@ const DriveList: React.FC<DriveListProps> = ({ drives, onViewMap }) => {
     const m = Math.round(mins % 60);
     return `${h} h ${m} min`;
   };
+  
+  const formatDurationHHMM = (totalMins: number) => {
+    const h = Math.floor(totalMins / 60);
+    const m = Math.round(totalMins % 60);
+    return `${h}:${m.toString().padStart(2, '0')}`;
+  }
 
   const formatTime = (isoString: string) => {
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -37,16 +112,86 @@ const DriveList: React.FC<DriveListProps> = ({ drives, onViewMap }) => {
     return new Date(isoString).toLocaleDateString([], { month: '2-digit', day: '2-digit', year: 'numeric' });
   };
 
+  // Calculate Summaries based on ALL displayed drives
+  const summary = useMemo(() => {
+    return drives.reduce((acc, curr) => ({
+        distance: acc.distance + curr.distance,
+        duration: acc.duration + curr.duration,
+        energy: acc.energy + curr.consumption
+    }), { distance: 0, duration: 0, energy: 0 });
+  }, [drives]);
+
   return (
     <div className="space-y-6 pb-10">
-      <div className="flex justify-between items-end px-1">
-        <h3 className="text-2xl font-bold text-white">Recent Drives</h3>
-        <span className="text-xs text-slate-500 uppercase tracking-widest font-bold mb-1">Last 30 trips</span>
+      {/* SUMMARY HEADER */}
+      <div className="grid grid-cols-3 gap-3">
+         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-lg flex flex-col items-center justify-center">
+             <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Total Distance</div>
+             <div className="text-2xl font-bold text-white tracking-tight">
+                {summary.distance.toFixed(1)} <span className="text-xs font-normal text-slate-400">km</span>
+             </div>
+         </div>
+         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-lg flex flex-col items-center justify-center">
+             <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Total Duration</div>
+             <div className="text-2xl font-bold text-white tracking-tight">
+                {formatDurationHHMM(summary.duration)} <span className="text-xs font-normal text-slate-400">h:m</span>
+             </div>
+         </div>
+         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-lg flex flex-col items-center justify-center">
+             <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Total Energy</div>
+             <div className="text-2xl font-bold text-white tracking-tight">
+                {summary.energy.toFixed(1)} <span className="text-xs font-normal text-slate-400">kWh</span>
+             </div>
+         </div>
       </div>
 
-      {drives.length === 0 && (
+      {/* FILTER BAR */}
+      <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800 flex flex-wrap gap-2 items-center justify-between">
+         <div className="flex gap-2 items-center flex-1">
+             <input 
+                type="date" 
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500 w-full"
+                placeholder="Start Date"
+             />
+             <span className="text-slate-500">-</span>
+             <input 
+                type="date" 
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500 w-full"
+                placeholder="End Date"
+             />
+         </div>
+         <div className="flex gap-2">
+            <button 
+                onClick={handleFilter}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+            >
+                Filter
+            </button>
+            {(startDate || endDate) && (
+                <button 
+                    onClick={handleReset}
+                    className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                >
+                    Reset
+                </button>
+            )}
+         </div>
+      </div>
+
+      <div className="flex justify-between items-end px-1">
+        <h3 className="text-xl font-bold text-white">Drives Log</h3>
+        <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">
+            {drives.length} records loaded
+        </span>
+      </div>
+
+      {drives.length === 0 && !loading && (
         <div className="bg-slate-800/50 border border-dashed border-slate-700 rounded-xl p-10 text-center text-slate-500 text-sm">
-          No drives recorded yet.
+          No drives found for this period.
         </div>
       )}
 
@@ -193,6 +338,19 @@ const DriveList: React.FC<DriveListProps> = ({ drives, onViewMap }) => {
           )}
         </div>
       ))}
+
+      {/* PAGINATION */}
+      {hasMore && (
+        <div className="pt-4 text-center">
+            <button 
+                onClick={() => loadDrives()}
+                disabled={loading}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold py-3 px-8 rounded-full transition-colors disabled:opacity-50"
+            >
+                {loading ? 'Loading...' : 'Load More Drives'}
+            </button>
+        </div>
+      )}
     </div>
   );
 };
