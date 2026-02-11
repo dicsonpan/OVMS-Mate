@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import mqtt from 'mqtt';
 
 console.log('================================================');
-console.log('   OVMS MATE LOGGER - i3 DRIVE & CHARGE v2.7   ');
+console.log('   OVMS MATE LOGGER - i3 DRIVE & CHARGE v2.8   ');
 console.log('================================================');
 
 const CONFIG = {
@@ -154,6 +154,7 @@ const processDriveLogic = async () => {
 
   const now = Date.now();
   const speed = currentState.speed || 0;
+  // Use a tiny threshold to account for GPS drift while parked, though usually 0 is 0.
   const isMoving = speed > 0;
   
   if (!activeDrive && isMoving) {
@@ -162,15 +163,20 @@ const processDriveLogic = async () => {
       startTime: now,
       startOdo: currentState.odometer,
       startSoc: currentState.soc,
+      // Track the last time the car actually moved to trim the tail later
+      lastMovingTime: now, 
       path: [],
       cooldownStartTime: null
     };
   }
 
   if (activeDrive) {
+    // 1. Record Path Point
     if (currentState.latitude && currentState.longitude) {
        const lastPoint = activeDrive.path[activeDrive.path.length - 1];
-       if (!lastPoint || (now - lastPoint.ts > 5000)) { 
+       // Log if it's the first point OR 5 seconds passed OR car is moving
+       // We log even if stopped briefly to capture traffic lights, but we mark the timestamp
+       if (!lastPoint || (now - lastPoint.ts > 5000) || isMoving) { 
          activeDrive.path.push({
            ts: now,
            lat: currentState.latitude,
@@ -182,23 +188,37 @@ const processDriveLogic = async () => {
        }
     }
 
-    if (!isMoving) {
+    // 2. Update Moving Status
+    if (isMoving) {
+      activeDrive.lastMovingTime = now; // Keep pushing this forward as long as we move
+      activeDrive.cooldownStartTime = null; // Reset cooldown
+    } else {
+      // Car is stopped (speed == 0)
       if (!activeDrive.cooldownStartTime) {
         activeDrive.cooldownStartTime = now;
       } else if (now - activeDrive.cooldownStartTime > DRIVE_COOLDOWN_MS) {
+        // Cooldown exceeded -> Drive officially over
         await finalizeDrive(activeDrive);
         activeDrive = null;
       }
-    } else {
-      activeDrive.cooldownStartTime = null;
     }
   }
 };
 
 const finalizeDrive = async (drive) => {
-  const realEndTime = drive.cooldownStartTime || Date.now();
+  // TRIM THE TAIL:
+  // Instead of using 'now' (which includes the cooldown period), 
+  // use 'lastMovingTime'. This removes the trailing flatline where speed was 0.
+  const realEndTime = drive.lastMovingTime || drive.startTime;
+  
+  // Filter the path to remove points recorded during the cooldown wait
+  const cleanPath = drive.path.filter(p => p.ts <= realEndTime);
+
   const distance = currentState.odometer - drive.startOdo;
-  if (distance < MIN_DRIVE_DISTANCE_KM) return;
+  if (distance < MIN_DRIVE_DISTANCE_KM) {
+      console.log(`🗑️ Drive discarded (Distance ${distance.toFixed(2)}km < ${MIN_DRIVE_DISTANCE_KM}km)`);
+      return;
+  }
 
   const durationMin = (realEndTime - drive.startTime) / 1000 / 60;
   const endSoc = currentState.soc;
@@ -207,6 +227,9 @@ const finalizeDrive = async (drive) => {
   
   let efficiency = 0;
   if (distance > 0 && energyUsed > 0) efficiency = (energyUsed * 1000) / distance;
+
+  // Sanity check on duration (sometimes lastMovingTime might be weird if telemetry gap)
+  if (durationMin <= 0) return;
 
   const drivePayload = {
     vehicle_id: CONFIG.vehicleId,
@@ -218,10 +241,10 @@ const finalizeDrive = async (drive) => {
     end_soc: endSoc,
     consumption: energyUsed,
     efficiency: efficiency,
-    path: drive.path
+    path: cleanPath
   };
 
-  console.log(`✅ Drive Saved: ${distance.toFixed(1)}km`);
+  console.log(`✅ Drive Saved: ${distance.toFixed(1)}km, Duration: ${durationMin.toFixed(1)}min`);
   if (supabase) await supabase.from('drives').insert(drivePayload);
 };
 
