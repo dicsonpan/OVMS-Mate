@@ -46,16 +46,16 @@ It is specifically optimized for the **BMW i3** (using specific PIDs/Metrics) bu
 
 <div align="center">
   <h3>Real-time Dashboard & Live Map</h3>
-  <img src="https://raw.githubusercontent.com/dicsonpan/OVMS-Mate/main/images/Home.jpeg" width="45%" alt="Dashboard" />
-  <img src="https://raw.githubusercontent.com/dicsonpan/OVMS-Mate/main/images/Map.jpeg" width="45%" alt="Map" />
+  <img src="images/Home.svg" width="45%" alt="Dashboard" />
+  <img src="images/Map.svg" width="45%" alt="Map" />
 </div>
 
 <br/>
 
 <div align="center">
   <h3>Drive History & Charging Analytics</h3>
-  <img src="https://raw.githubusercontent.com/dicsonpan/OVMS-Mate/main/images/Drives.jpeg" width="45%" alt="Drives" />
-  <img src="https://raw.githubusercontent.com/dicsonpan/OVMS-Mate/main/images/Charging.jpeg" width="45%" alt="Charging" />
+  <img src="images/Drives.svg" width="45%" alt="Drives" />
+  <img src="images/Charging.svg" width="45%" alt="Charging" />
 </div>
 
 ## 🏗 Architecture
@@ -106,7 +106,7 @@ OVMS_SERVER=dexters-web.de (or your broker IP)
 
 # Supabase Credentials (Found in Project Settings -> API)
 VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key...
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key-starts-with-ey...
 
 # Optional: Google Gemini API for AI Analysis
 API_KEY=AIzaSy...

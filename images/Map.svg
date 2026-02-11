@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#0f172a"/>
+  <!-- Map Background -->
+  <rect width="800" height="600" fill="#1e293b" opacity="0.5"/>
+  
+  <!-- Grid Streets -->
+  <path d="M0 100 h800 M0 250 h800 M0 400 h800 M0 550 h800" stroke="#334155" stroke-width="8"/>
+  <path d="M150 0 v600 M350 0 v600 M550 0 v600 M700 0 v600" stroke="#334155" stroke-width="8"/>
+  <path d="M0 50 L800 550" stroke="#334155" stroke-width="6"/>
+
+  <!-- Route Path -->
+  <path d="M150 550 Q 250 500, 350 400 T 550 250 L 700 100" fill="none" stroke="#3b82f6" stroke-width="6" stroke-linecap="round" stroke-dasharray="10 5"/>
+  
+  <!-- Car Marker -->
+  <circle cx="550" cy="250" r="12" fill="#3b82f6" stroke="#ffffff" stroke-width="3"/>
+  
+  <!-- UI Overlay -->
+  <rect x="580" y="30" width="200" height="80" rx="10" fill="#1e293b" stroke="#475569" stroke-width="2" opacity="0.9"/>
+  <text x="600" y="60" fill="#94a3b8" font-family="sans-serif" font-size="12">CURRENT SPEED</text>
+  <text x="600" y="90" fill="#f1f5f9" font-family="sans-serif" font-size="28" font-weight="bold">45 <tspan font-size="16" fill="#94a3b8">km/h</tspan></text>
+
+  <!-- Location Pin -->
+  <path d="M350 400 l-10 -20 a 10 10 0 1 1 20 0 z" fill="#ef4444"/>
+</svg>
