@@ -46,7 +46,7 @@ It is specifically optimized for the **BMW i3** (using specific PIDs/Metrics) bu
 
 <div align="center">
   <h3>Real-time Dashboard & Live Map</h3>
-  <img src="images/Home.jpeg" width="45%" alt="Dashboard" />
+  <img src="https://private-user-images.githubusercontent.com/1907869/548024185-9287d329-8cb9-404e-86ec-022e0a055177.jpeg?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NzA3ODcxMTUsIm5iZiI6MTc3MDc4NjgxNSwicGF0aCI6Ii8xOTA3ODY5LzU0ODAyNDE4NS05Mjg3ZDMyOS04Y2I5LTQwNGUtODZlYy0wMjJlMGEwNTUxNzcuanBlZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNjAyMTElMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjYwMjExVDA1MTMzNVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTYxNzk1MTllNTFjM2Q5OGJjMTc2MmQ2NmU3ZmE1MTA2YjkyYTNiZGM5ODNhOTBkYzBhZjBiNzBmODY4NjA2ZjQmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.6cTCBvOqttlOCybl_tXUSswu7EazSIEo1YRLzo6WQog" width="45%" alt="Dashboard" />
   <img src="images/Map.jpeg" width="45%" alt="Map" />
 </div>
 
