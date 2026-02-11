@@ -1,10 +1,9 @@
 
 import { createClient } from '@supabase/supabase-js';
 import mqtt from 'mqtt';
-import crypto from 'crypto';
 
 console.log('================================================');
-console.log('   OVMS MATE LOGGER - i3 DRIVE & CHARGE v2.5   ');
+console.log('   OVMS MATE LOGGER - i3 DRIVE & CHARGE v2.7   ');
 console.log('================================================');
 
 const CONFIG = {
@@ -21,12 +20,10 @@ const CONFIG = {
 const DRIVE_COOLDOWN_MS = 15 * 60 * 1000; 
 const MIN_DRIVE_DISTANCE_KM = 0.1;
 const MIN_CHARGE_DURATION_MIN = 1; 
-const CHARGE_HEARTBEAT_INTERVAL_MS = 60000; // Send 'stat' command if silence > 60s during charging
 
 // --- STATE MACHINES ---
 let activeDrive = null; 
 let activeCharge = null;
-let lastMsgTime = Date.now(); // Track silence
 
 const supabase = (CONFIG.supabaseUrl && CONFIG.supabaseKey) 
   ? createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey) 
@@ -121,10 +118,9 @@ const parseValue = (val) => {
 };
 
 client.on('message', (topic, message) => {
-  lastMsgTime = Date.now(); // Update silence tracker
-  
   const metricPath = topic.split('/metric/')[1];
   if (!metricPath) return;
+  
   const key = metricPath.replace(/\//g, '.');
   const rawValue = message.toString();
   
@@ -143,20 +139,6 @@ client.on('message', (topic, message) => {
   else currentState.car[key] = rawValue;
   currentState.isDirty = true;
 });
-
-// --- HELPER: Send Heartbeat ---
-const sendActiveHeartbeat = () => {
-  if (!client.connected) return;
-  
-  // Generate a random UUID for the command ID
-  const uuid = crypto.randomUUID();
-  const clientId = 'ovms-mate-logger';
-  const topic = `ovms/${CONFIG.mqttUser}/${CONFIG.vehicleId}/client/${clientId}/command/${uuid}`;
-  
-  // 'stat' command forces OVMS to re-read and publish status
-  client.publish(topic, 'stat');
-  console.log('💓 Active Charge Heartbeat: Sent "stat" command to keep session alive');
-};
 
 const getPackCapacity = () => {
   if (currentState.capacity) return currentState.capacity;
@@ -254,8 +236,7 @@ const processChargeLogic = async () => {
   // 1. i3 Specific Signals
   const plugStatus = currentState.chargePlugStatus; // Expected: "Connected", "Type 2", etc.
   const pilotSignal = currentState.chargePilotA || 0;
-  // const readyToCharge = currentState.readyToCharge; 
-
+  
   // Check if plugStatus contains "Connected" or is boolean true (insensitive check)
   const isPlugConnected = plugStatus === true || 
                           (typeof plugStatus === 'string' && plugStatus.toLowerCase().includes('connect'));
@@ -266,14 +247,9 @@ const processChargeLogic = async () => {
   const isStandardCharging = currentState.isChargingStandard === true;
   const isStateCharging = currentState.chargeStateStandard === 'charging';
 
-  // Combined Condition
+  // Combined Condition: Start if any indicator says "Charging"
   const isCharging = isI3Charging || isStandardCharging || isStateCharging;
   
-  // Stop Condition
-  // If we started, we stop when ALL indications are false/stopped
-  const isStopped = (!isPlugConnected && !isStandardCharging && !isStateCharging) || 
-                    (isPlugConnected && pilotSignal === 0 && !isStandardCharging && !isStateCharging);
-
   // START
   if (!activeCharge && isCharging) {
     console.log(`⚡ Charging Started!`);
@@ -293,36 +269,46 @@ const processChargeLogic = async () => {
 
   // UPDATE
   if (activeCharge) {
-    // --- Heartbeat Logic ---
-    // If we believe we are charging, but haven't heard from the car in > 60s,
-    // sending a 'stat' command to wake up OVMS reporting logic.
-    if ((now - lastMsgTime) > CHARGE_HEARTBEAT_INTERVAL_MS) {
-        sendActiveHeartbeat();
-        // Reset timer locally to avoid spamming if network is just slow
-        lastMsgTime = now; 
-    }
-
     const rawPower = currentState.power || 0;
     const absPower = Math.abs(rawPower);
     
-    activeCharge.maxPower = Math.max(activeCharge.maxPower, absPower);
-    activeCharge.powerSum += absPower;
-    activeCharge.samples++;
+    // Check Stop Conditions requested:
+    // 1. Plug not connected
+    // 2. Pilot == 0
+    // 3. Ready to charge == no (false)
+    // 4. Power > -0.2 (Assuming negative is charging, so > -0.2 means effectively 0 or discharging)
     
-    // Log sample data
-    const lastPoint = activeCharge.chartData[activeCharge.chartData.length - 1];
-    if (!lastPoint || (now - lastPoint.timestamp > 60000)) {
-      activeCharge.chartData.push({
-        time: new Date(now).toISOString(),
-        timestamp: now,
-        power: absPower, 
-        soc: currentState.soc
-      });
-    }
+    // Note: rawPower in OVMS is typically negative during charge (e.g. -7.2 kW). 
+    // If it becomes > -0.2 (e.g. 0 kW), we consider charging stopped.
+    const stopConditionMet = 
+        !isPlugConnected || 
+        pilotSignal === 0 || 
+        currentState.readyToCharge === false ||
+        rawPower > -0.2;
 
-    // END
-    if (isStopped) {
-      console.log(`⚡ Charging Stopped.`);
+    // Safety fallback: if standard 'v.c.state' is strongly 'charging', we might hesitate,
+    // but the user's specific instruction "v.b.power > -0.2" implies they trust the power reading.
+    // If power drops to 0, charging is effectively done for logging purposes.
+    const isStopped = stopConditionMet;
+
+    if (!isStopped) {
+        // Only accumulate stats if still validly charging
+        activeCharge.maxPower = Math.max(activeCharge.maxPower, absPower);
+        activeCharge.powerSum += absPower;
+        activeCharge.samples++;
+        
+        // Log sample data
+        const lastPoint = activeCharge.chartData[activeCharge.chartData.length - 1];
+        if (!lastPoint || (now - lastPoint.timestamp > 60000)) {
+          activeCharge.chartData.push({
+            time: new Date(now).toISOString(),
+            timestamp: now,
+            power: absPower, 
+            soc: currentState.soc
+          });
+        }
+    } else {
+      console.log(`⚡ Charging Stopped. (Reason: Plug:${isPlugConnected}, Pilot:${pilotSignal}, Ready:${currentState.readyToCharge}, Power:${rawPower})`);
       await finalizeCharge(activeCharge);
       activeCharge = null;
     }
@@ -435,5 +421,6 @@ setInterval(async () => {
 
 client.on('connect', () => {
   console.log('🔌 MQTT Connected');
+  // Subscribe to Metrics
   client.subscribe(`ovms/${CONFIG.mqttUser}/${CONFIG.vehicleId}/metric/#`);
 });
