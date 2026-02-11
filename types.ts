@@ -1,4 +1,5 @@
 
+
 export enum VehicleState {
   Parked = 'Parked',
   Driving = 'Driving',
@@ -141,4 +142,5 @@ export interface OvmsConfig {
   serverUrl?: string;
   costPerKwh?: number; // New setting
   currency?: string;   // New setting
+  geminiApiKey?: string; // New setting for AI Insight
 }

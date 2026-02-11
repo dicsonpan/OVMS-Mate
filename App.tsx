@@ -26,7 +26,8 @@ const App: React.FC = () => {
     serverUrl: 'huashi.sparkminds.io:18830',
     serverPassword: '',
     costPerKwh: 0.15, // Default
-    currency: 'USD'   // Default
+    currency: 'USD',  // Default
+    geminiApiKey: ''  // Default
   });
   const [showPassword, setShowPassword] = useState(false);
 
@@ -206,10 +207,45 @@ const App: React.FC = () => {
                     placeholder="eyJh..."
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* 4. AI Configuration */}
+            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-lg">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-white">
+                <span className="bg-indigo-500 w-2 h-6 rounded-full"></span>
+                AI Configuration
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-slate-300 mb-1">Gemini API Key</label>
+                  <input 
+                    type={showPassword ? "text" : "password"}
+                    value={config.geminiApiKey || ''}
+                    onChange={(e) => setConfig({...config, geminiApiKey: e.target.value})}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-mono text-sm placeholder-slate-600"
+                    placeholder="AIzaSy..."
+                  />
+                   <p className="text-xs text-slate-500 mt-2">
+                    Required for "AI Insight" drive analysis. Get your key at <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300">Google AI Studio</a>.
+                  </p>
+                </div>
+                
+                {/* Button to show/hide sensitive fields (affects both Supabase & Gemini) */}
+                <div className="flex items-center gap-2 mt-2">
+                  <input 
+                    type="checkbox" 
+                    id="showSecrets"
+                    checked={showPassword}
+                    onChange={(e) => setShowPassword(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="showSecrets" className="text-sm text-slate-400 select-none cursor-pointer">Show Secrets</label>
+                </div>
 
                 <button 
                   onClick={handleSaveConfig}
-                  className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-lg mt-2 transition-colors shadow-lg"
+                  className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-lg mt-6 transition-colors shadow-lg"
                 >
                   Save & Reload
                 </button>
@@ -217,7 +253,7 @@ const App: React.FC = () => {
             </div>
             
             <div className="text-center text-xs text-slate-500 pb-4">
-              OVMS Mate v0.2.1 • BMW i3 Edition
+              OVMS Mate v0.2.2 • BMW i3 Edition
             </div>
           </div>
         );

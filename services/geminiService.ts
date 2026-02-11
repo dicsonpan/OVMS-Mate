@@ -1,13 +1,30 @@
+
 import { GoogleGenAI } from "@google/genai";
-import { DriveSession } from "../types";
+import { DriveSession, OvmsConfig } from "../types";
 
 export const analyzeDriveEfficiency = async (drive: DriveSession): Promise<string> => {
+  // 1. Try process.env first (if built with env var)
   // @ts-ignore
-  const apiKey = process.env.API_KEY;
+  let apiKey = process.env.API_KEY;
   
+  // 2. Fallback to LocalStorage configuration (User Settings)
   if (!apiKey) {
-    console.warn("Gemini API Key missing (process.env.API_KEY)");
-    return "API Key not configured. Unable to analyze.";
+    try {
+      const savedConfig = localStorage.getItem('ovms_config');
+      if (savedConfig) {
+        const config: OvmsConfig = JSON.parse(savedConfig);
+        if (config.geminiApiKey && config.geminiApiKey.trim() !== '') {
+          apiKey = config.geminiApiKey;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to read config from localStorage", e);
+    }
+  }
+
+  if (!apiKey) {
+    console.warn("Gemini API Key missing (process.env.API_KEY or Settings)");
+    return "API Key not configured. Please add your Gemini API Key in Settings > AI Configuration.";
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -37,6 +54,6 @@ export const analyzeDriveEfficiency = async (drive: DriveSession): Promise<strin
     return response.text || "No analysis available.";
   } catch (error) {
     console.error("Gemini analysis failed", error);
-    return "Failed to generate analysis. Please try again later.";
+    return "Failed to generate analysis. Please check your API Key and try again.";
   }
 };
