@@ -34,4 +34,3 @@ build
 *.swo
 
 # User requested: Exclude all files in images directory
-images/*
