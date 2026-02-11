@@ -25,16 +25,23 @@ const App: React.FC = () => {
     vehicleName: '',
     serverUrl: 'huashi.sparkminds.io:18830',
     serverPassword: '',
-    costPerKwh: 0.15, // Default
-    currency: 'USD',  // Default
-    geminiApiKey: ''  // Default
+    costPerKwh: 0.15,
+    currency: 'USD',
+    // AI Defaults
+    aiProvider: 'gemini',
+    geminiApiKey: '',
+    openaiBaseUrl: 'https://api.siliconflow.cn/v1', // Default suggestion for SiliconFlow
+    openaiApiKey: '',
+    openaiModel: 'deepseek-ai/DeepSeek-V3' // Default suggestion
   });
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     const savedConfig = localStorage.getItem('ovms_config');
     if (savedConfig) {
-      setConfig(JSON.parse(savedConfig));
+      const parsed = JSON.parse(savedConfig);
+      // Merge with defaults to ensure new fields exist
+      setConfig(prev => ({ ...prev, ...parsed }));
     } else {
       // @ts-ignore
       const envUrl = import.meta.env?.VITE_SUPABASE_URL || '';
@@ -216,22 +223,97 @@ const App: React.FC = () => {
                 <span className="bg-indigo-500 w-2 h-6 rounded-full"></span>
                 AI Configuration
               </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm text-slate-300 mb-1">Gemini API Key</label>
-                  <input 
-                    type={showPassword ? "text" : "password"}
-                    value={config.geminiApiKey || ''}
-                    onChange={(e) => setConfig({...config, geminiApiKey: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-mono text-sm placeholder-slate-600"
-                    placeholder="AIzaSy..."
-                  />
-                   <p className="text-xs text-slate-500 mt-2">
-                    Required for "AI Insight" drive analysis. Get your key at <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300">Google AI Studio</a>.
-                  </p>
+              
+              {/* Provider Selection */}
+              <div className="mb-6">
+                <label className="block text-xs uppercase font-bold text-slate-500 mb-2">AI Provider</label>
+                <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
+                  <button 
+                    onClick={() => setConfig({...config, aiProvider: 'gemini'})}
+                    className={`flex-1 py-2 rounded-md text-sm font-bold transition-all ${
+                      config.aiProvider === 'gemini' || !config.aiProvider 
+                        ? 'bg-indigo-600 text-white shadow-md' 
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Google Gemini
+                  </button>
+                  <button 
+                    onClick={() => setConfig({...config, aiProvider: 'openai'})}
+                    className={`flex-1 py-2 rounded-md text-sm font-bold transition-all ${
+                      config.aiProvider === 'openai' 
+                        ? 'bg-indigo-600 text-white shadow-md' 
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    OpenAI / Custom
+                  </button>
                 </div>
-                
-                {/* Button to show/hide sensitive fields (affects both Supabase & Gemini) */}
+              </div>
+
+              {/* Gemini Settings */}
+              {(config.aiProvider === 'gemini' || !config.aiProvider) && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-left-2 duration-300">
+                  <div>
+                    <label className="block text-sm text-slate-300 mb-1">Gemini API Key</label>
+                    <input 
+                      type={showPassword ? "text" : "password"}
+                      value={config.geminiApiKey || ''}
+                      onChange={(e) => setConfig({...config, geminiApiKey: e.target.value})}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-mono text-sm placeholder-slate-600"
+                      placeholder="AIzaSy..."
+                    />
+                    <p className="text-xs text-slate-500 mt-2">
+                      Get your key at <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300">Google AI Studio</a>.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* OpenAI / Custom Settings */}
+              {config.aiProvider === 'openai' && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300">
+                   <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 text-xs text-slate-400 mb-2">
+                      Supports SiliconFlow (DeepSeek), OpenAI, or any OpenAI-compatible API.
+                   </div>
+                   
+                   <div>
+                     <label className="block text-sm text-slate-300 mb-1">API Base URL</label>
+                     <input 
+                        type="text" 
+                        value={config.openaiBaseUrl || ''}
+                        onChange={(e) => setConfig({...config, openaiBaseUrl: e.target.value})}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-mono text-sm placeholder-slate-600"
+                        placeholder="https://api.siliconflow.cn/v1"
+                      />
+                   </div>
+
+                   <div>
+                     <label className="block text-sm text-slate-300 mb-1">API Key</label>
+                     <input 
+                        type={showPassword ? "text" : "password"}
+                        value={config.openaiApiKey || ''}
+                        onChange={(e) => setConfig({...config, openaiApiKey: e.target.value})}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-mono text-sm placeholder-slate-600"
+                        placeholder="sk-..."
+                      />
+                   </div>
+
+                   <div>
+                     <label className="block text-sm text-slate-300 mb-1">Model Name</label>
+                     <input 
+                        type="text" 
+                        value={config.openaiModel || ''}
+                        onChange={(e) => setConfig({...config, openaiModel: e.target.value})}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-mono text-sm placeholder-slate-600"
+                        placeholder="deepseek-ai/DeepSeek-V3"
+                      />
+                   </div>
+                </div>
+              )}
+              
+              {/* Common Save Area */}
+              <div className="pt-2">
                 <div className="flex items-center gap-2 mt-2">
                   <input 
                     type="checkbox" 
@@ -253,7 +335,7 @@ const App: React.FC = () => {
             </div>
             
             <div className="text-center text-xs text-slate-500 pb-4">
-              OVMS Mate v0.2.2 • BMW i3 Edition
+              OVMS Mate v0.3.0 • BMW i3 Edition
             </div>
           </div>
         );

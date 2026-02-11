@@ -140,7 +140,15 @@ export interface OvmsConfig {
   vehicleName?: string; 
   serverPassword?: string;
   serverUrl?: string;
-  costPerKwh?: number; // New setting
-  currency?: string;   // New setting
-  geminiApiKey?: string; // New setting for AI Insight
+  costPerKwh?: number; 
+  currency?: string;
+  
+  // AI Configuration
+  aiProvider?: 'gemini' | 'openai'; // Selector for AI Provider
+  geminiApiKey?: string;
+  
+  // OpenAI / Custom LLM Fields
+  openaiBaseUrl?: string; // e.g. https://api.siliconflow.cn/v1
+  openaiApiKey?: string;
+  openaiModel?: string;   // e.g. deepseek-ai/DeepSeek-V3
 }
