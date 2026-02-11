@@ -3,10 +3,15 @@
 
 <div align="center">
 
-![OVMS Mate Banner](https://img.shields.io/badge/OVMS-Mate-blue?style=for-the-badge&logo=electric-vehicle)
+<!-- You can replace this SVG with a hosted image later, but this serves as a placeholder -->
+<img src="https://img.shields.io/badge/OVMS-Mate-blue?style=for-the-badge&logo=electric-vehicle&logoColor=white" alt="OVMS Mate Logo" />
+
+<br/>
+
 ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
 
 **A modern, TeslaMate-inspired monitoring dashboard for Open Vehicle Monitoring System (OVMS).**
 
@@ -20,34 +25,37 @@
 
 **OVMS Mate** is a self-hosted (or cloud-hosted) visualization dashboard designed for EV owners using the [OVMS](https://www.openvehicles.com/) hardware.
 
-Inspired by the clean and data-rich interface of [TeslaMate](https://github.com/teslamate-org/teslamate), this project aims to bring that same high-quality experience to non-Tesla vehicles (specifically optimized for **BMW i3**, but adaptable to others).
+While the official OVMS App is great for control, **OVMS Mate** focuses on **beautiful data visualization**, **historical analysis**, and **efficiency tracking**. It draws heavy inspiration from the famous [TeslaMate](https://github.com/teslamate-org/teslamate) project but is built for the open ecosystem of OVMS.
 
-Unlike the standard OVMS App, OVMS Mate focuses on **historical data visualization**, **efficiency analysis**, and **beautiful real-time dashboards**.
+It is specifically optimized for the **BMW i3** (using specific PIDs/Metrics) but can be easily adapted for other OVMS-supported vehicles.
 
-## ✨ Features
+## ✨ Key Features
 
+*   **TeslaMate-inspired UI**: A clean, dark-mode interface that looks great on mobile and desktop.
+*   **Passive Logging**: The logger subscribes silently to MQTT topics (`v.b.*`, `v.p.*`, etc.) without waking the car unnecessarily. It captures data only when the car pushes updates.
+*   **Drive Recording**: Automatically logs trips with detailed stats:
+    *   Efficiency (Wh/km)
+    *   Elevation & Speed Charts
+    *   Total Consumption
+    *   GPS Path on Map
+*   **Charging Analytics**: detailed charging sessions with power curves (kW), SoC gain, and cost calculations.
 *   **Real-time Dashboard**: Live status of SoC, Range, Speed, Power, and Battery/Motor temperatures.
-*   **Drive Logging**: Automatically records trips with efficiency metrics (Wh/km), elevation, and speed charts.
-*   **Charging History**: detailed charging sessions with power curves and cost calculations.
-*   **Live Map**: Real-time tracking with trajectory lines (TeslaMate style).
-*   **AI Insights**: Integrated **Google Gemini AI** to analyze your drive efficiency and provide tips.
-*   **Passive Logging**: Listens silently to MQTT traffic without waking the car unnecessarily.
-*   **Mobile Friendly**: Fully responsive design for phone, tablet, and desktop.
+*   **AI Insights (Experimental)**: Integrated **Google Gemini AI** to analyze your drive efficiency and provide driving tips.
 
 ## 🏗 Architecture
 
-OVMS Mate consists of three main components:
+OVMS Mate modernizes the stack by separating data ingestion from visualization:
 
-1.  **Backend Logger (Node.js)**: A lightweight Docker container that subscribes to your OVMS MQTT broker. It listens for metrics, detects state changes (Driving/Charging), and writes data to the database.
+1.  **Logger (Node.js)**: A lightweight Docker container. It connects to your OVMS MQTT broker, listens for metrics, detects state changes (Driving/Charging), and pushes clean data to the database.
 2.  **Database (Supabase)**: A PostgreSQL database that stores all telemetry, drives, and charging sessions.
-3.  **Frontend (React)**: A modern web application (hosted on Vercel or locally) that visualizes the data.
+3.  **Frontend (React/Vite)**: A responsive web application (hosted on Vercel, Netlify, or locally) that visualizes the data.
 
 ```mermaid
 graph LR
-    Car[OVMS Module] -- MQTT --> Broker[MQTT Broker]
-    Broker -- Sub --> Logger[OVMS Mate Logger]
-    Logger -- Write --> DB[(Supabase PostgreSQL)]
-    Frontend[React App] -- Read --> DB
+    Car[OVMS Module] -- MQTT Push --> Broker[MQTT Broker]
+    Broker -- Subscribe --> Logger[OVMS Mate Logger]
+    Logger -- Insert --> DB[(Supabase PostgreSQL)]
+    Frontend[React Web App] -- Query --> DB
 ```
 
 ## 🚀 Getting Started
@@ -98,7 +106,7 @@ docker-compose up -d --build
 
 ### Step 4: Run the Frontend
 
-You can deploy the frontend to **Vercel** (recommended) or run it locally.
+You can deploy the frontend to **Vercel** (recommended for free SSL/hosting) or run it locally.
 
 **Local Development:**
 ```bash
@@ -113,19 +121,17 @@ npm run dev
 
 ## ☕ Support the Project
 
-If you find OVMS Mate useful and want to support its development, you can buy me a coffee!
+This project is free and open-source. If you find it useful for monitoring your EV, consider buying me a coffee! It helps keep the updates coming.
 
-*   **PayPal**: [dicsonpan@gmail.com](https://www.paypal.com/myaccount/transfer/homepage)
+<a href="https://www.paypal.com/paypalme/dicsonpan" target="_blank">
+  <img src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" alt="Donate with PayPal" />
+</a>
+
+**PayPal**: dicsonpan@gmail.com
 
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-
-1.  Fork the Project
-2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4.  Push to the Branch (`git push origin feature/AmazingFeature`)
-5.  Open a Pull Request
 
 ## 📄 License
 
