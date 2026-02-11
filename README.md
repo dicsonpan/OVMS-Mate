@@ -46,16 +46,16 @@ It is specifically optimized for the **BMW i3** (using specific PIDs/Metrics) bu
 
 <div align="center">
   <h3>Real-time Dashboard & Live Map</h3>
-  <img src="https://github.com/dicsonpan/OVMS-Mate/raw/main/images/Home.jpeg" width="45%" alt="Dashboard" />
-  <img src="https://github.com/dicsonpan/OVMS-Mate/raw/main/images//Map.jpeg" width="45%" alt="Map" />
+  <img src="https://raw.githubusercontent.com/dicsonpan/OVMS-Mate/main/images/Home.jpeg" width="45%" alt="Dashboard" />
+  <img src="https://raw.githubusercontent.com/dicsonpan/OVMS-Mate/main/images/Map.jpeg" width="45%" alt="Map" />
 </div>
 
 <br/>
 
 <div align="center">
   <h3>Drive History & Charging Analytics</h3>
-  <img src="https://github.com/dicsonpan/OVMS-Mate/raw/main/images/Drives.jpeg" width="45%" alt="Drives" />
-  <img src="https://github.com/dicsonpan/OVMS-Mate/raw/main/images/Charging.jpeg" width="45%" alt="Charging" />
+  <img src="https://raw.githubusercontent.com/dicsonpan/OVMS-Mate/main/images/Drives.jpeg" width="45%" alt="Drives" />
+  <img src="https://raw.githubusercontent.com/dicsonpan/OVMS-Mate/main/images/Charging.jpeg" width="45%" alt="Charging" />
 </div>
 
 ## 🏗 Architecture
