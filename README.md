@@ -46,16 +46,16 @@ It is specifically optimized for the **BMW i3** (using specific PIDs/Metrics) bu
 
 <div align="center">
   <h3>Real-time Dashboard & Live Map</h3>
-  <img src="images/Home.svg" width="45%" alt="Dashboard" />
-  <img src="images/Map.svg" width="45%" alt="Map" />
+  <img src="images/Home.jpg" width="45%" alt="Dashboard" />
+  <img src="images/Map.jpg" width="45%" alt="Map" />
 </div>
 
 <br/>
 
 <div align="center">
   <h3>Drive History & Charging Analytics</h3>
-  <img src="images/Drives.svg" width="45%" alt="Drives" />
-  <img src="images/Charging.svg" width="45%" alt="Charging" />
+  <img src="images/Drives.jpg" width="45%" alt="Drives" />
+  <img src="images/Charging.jpg" width="45%" alt="Charging" />
 </div>
 
 ## 🏗 Architecture
