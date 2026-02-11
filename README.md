@@ -42,6 +42,22 @@ It is specifically optimized for the **BMW i3** (using specific PIDs/Metrics) bu
 *   **Real-time Dashboard**: Live status of SoC, Range, Speed, Power, and Battery/Motor temperatures.
 *   **AI Insights (Experimental)**: Integrated **Google Gemini AI** to analyze your drive efficiency and provide driving tips.
 
+## 📸 Screenshots
+
+<div align="center">
+  <h3>Real-time Dashboard & Live Map</h3>
+  <img src="./images/Home.jpeg" width="45%" alt="Dashboard" />
+  <img src="./images/Map.jpeg" width="45%" alt="Map" />
+</div>
+
+<br/>
+
+<div align="center">
+  <h3>Drive History & Charging Analytics</h3>
+  <img src="./images/Drives.jpeg" width="45%" alt="Drives" />
+  <img src="./images/Charging.jpeg" width="45%" alt="Charging" />
+</div>
+
 ## 🏗 Architecture
 
 OVMS Mate modernizes the stack by separating data ingestion from visualization:
