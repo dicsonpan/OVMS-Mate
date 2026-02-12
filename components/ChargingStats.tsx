@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { ChargeSession, OvmsConfig } from '../types';
-import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
+import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { fetchCharges } from '../services/dataService';
+import { calculateSessionCost } from '../services/costCalculator';
 
 interface ChargingStatsProps {
   config: OvmsConfig;
@@ -55,7 +56,6 @@ const ChargingStats: React.FC<ChargingStatsProps> = ({ config }) => {
   const handleReset = () => {
     setStartDate('');
     setEndDate('');
-    // Use timeout to break batching and force reload after state clear
     setTimeout(() => {
         setLoading(true);
         fetchCharges({ limit: PAGE_SIZE, offset: 0 }).then(data => {
@@ -69,18 +69,20 @@ const ChargingStats: React.FC<ChargingStatsProps> = ({ config }) => {
 
   // --- Calculations ---
   const summary = useMemo(() => {
-     // 3. Current page totals (or could be all fetched if we wanted, but standard behavior is usually current view)
-     // To get TOTAL of everything matching filters, we'd need a separate aggregate query. 
-     // For now, let's sum up what is loaded (which mimics the 'current page' behavior described)
-     const totalKwh = charges.reduce((acc, curr) => acc + curr.addedKwh, 0);
-     const costPerKwh = config.costPerKwh || 0; 
-     const totalCost = totalKwh * costPerKwh;
+     // Use the sophisticated calculator for every session
+     let totalCost = 0;
+     let totalKwh = 0;
+
+     charges.forEach(c => {
+       totalKwh += c.addedKwh;
+       totalCost += calculateSessionCost(c, config);
+     });
+
      return { totalKwh, totalCost };
   }, [charges, config]);
 
   const formatCurrency = (val: number) => {
      const currency = config.currency || 'USD';
-     // Handle common symbols
      if (currency === 'USD') return `$${val.toFixed(2)}`;
      if (currency === 'EUR') return `€${val.toFixed(2)}`;
      if (currency === 'GBP') return `£${val.toFixed(2)}`;
@@ -119,7 +121,7 @@ const ChargingStats: React.FC<ChargingStatsProps> = ({ config }) => {
            <div className="text-3xl font-bold text-white">
              {formatCurrency(summary.totalCost)}
            </div>
-           {(!config.costPerKwh || config.costPerKwh === 0) && (
+           {(!config.costPerKwh && (!config.locations || config.locations.length === 0)) && (
                <div className="text-[9px] text-orange-400 mt-1">Configure cost in Settings</div>
            )}
         </div>
@@ -175,7 +177,7 @@ const ChargingStats: React.FC<ChargingStatsProps> = ({ config }) => {
       )}
 
       {charges.map(charge => (
-        <ChargeCard key={charge.id} charge={charge} />
+        <ChargeCard key={charge.id} charge={charge} config={config} formatCurrency={formatCurrency} />
       ))}
 
       {/* PAGINATION */}
@@ -195,7 +197,7 @@ const ChargingStats: React.FC<ChargingStatsProps> = ({ config }) => {
 };
 
 // --- Sub-component: Individual Charge Card ---
-const ChargeCard: React.FC<{ charge: ChargeSession }> = ({ charge }) => {
+const ChargeCard: React.FC<{ charge: ChargeSession; config: OvmsConfig; formatCurrency: (v: number) => string }> = ({ charge, config, formatCurrency }) => {
     const [displayLocation, setDisplayLocation] = useState(charge.location || 'Loading...');
 
     // Location Logic: Name -> Coordinates -> Reverse Geocode
@@ -208,9 +210,7 @@ const ChargeCard: React.FC<{ charge: ChargeSession }> = ({ charge }) => {
 
         // 2. Fallback to Address via Reverse Geocoding
         if (charge.latitude && charge.longitude) {
-            // Show coords momentarily
             const coordStr = `${charge.latitude.toFixed(4)}, ${charge.longitude.toFixed(4)}`;
-            // Only update if we haven't already
             if(displayLocation === 'Loading...') setDisplayLocation(coordStr);
 
             fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${charge.latitude}&lon=${charge.longitude}&zoom=18&addressdetails=1`, {
@@ -233,14 +233,15 @@ const ChargeCard: React.FC<{ charge: ChargeSession }> = ({ charge }) => {
 
     const formatTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+    // Calculate individual cost
+    const sessionCost = useMemo(() => calculateSessionCost(charge, config), [charge, config]);
+
     // Chart Data Preparation
-    // TeslaMate style: Green gradient area chart
     const chartData = useMemo(() => {
         if(!charge.chartData) return [];
         return charge.chartData.map((pt, index) => ({
             ...pt,
-            // X-axis is often cleaner as 'minutes since start'
-            relTime: index, // simplified
+            relTime: index, 
             displayTime: new Date(pt.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
         }));
     }, [charge.chartData]);
@@ -251,7 +252,6 @@ const ChargeCard: React.FC<{ charge: ChargeSession }> = ({ charge }) => {
           <div className="flex justify-between items-start mb-6">
             <div>
               <div className="text-xl font-bold text-white flex items-center gap-2">
-                 {/* Optional Location Pin */}
                  {displayLocation}
               </div>
               <div className="text-sm text-slate-400 mt-1">
@@ -260,7 +260,7 @@ const ChargeCard: React.FC<{ charge: ChargeSession }> = ({ charge }) => {
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-green-400">+{charge.addedKwh.toFixed(1)} <span className="text-sm text-green-600">kWh</span></div>
-              <div className="text-slate-400 font-mono text-sm">{Math.round(charge.duration)} min</div>
+              <div className="text-slate-400 font-mono text-sm">{formatCurrency(sessionCost)}</div>
             </div>
           </div>
 
@@ -278,7 +278,6 @@ const ChargeCard: React.FC<{ charge: ChargeSession }> = ({ charge }) => {
                 <XAxis dataKey="displayTime" hide />
                 <YAxis hide domain={[0, 'auto']} />
                 
-                {/* Custom Tooltip matching screenshot style */}
                 <Tooltip 
                   content={({ active, payload }) => {
                       if (active && payload && payload.length) {
@@ -307,13 +306,9 @@ const ChargeCard: React.FC<{ charge: ChargeSession }> = ({ charge }) => {
                 />
               </AreaChart>
             </ResponsiveContainer>
-            
-            {/* Overlay stats: Start SoC -> End SoC on chart? Or just text below. 
-                Screenshot shows a green dot on the line. We can add a dot via activeDot but simple is fine. 
-            */}
           </div>
           
-          {/* FOOTER STATS (Avg / Max) */}
+          {/* FOOTER STATS */}
           <div className="flex justify-between items-center text-sm">
              <div className="flex gap-6">
                  <div>

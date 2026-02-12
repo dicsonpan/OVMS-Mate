@@ -1,5 +1,4 @@
 
-
 export enum VehicleState {
   Parked = 'Parked',
   Driving = 'Driving',
@@ -133,6 +132,22 @@ export interface TelemetryData {
   carMetrics?: Record<string, any>;
 }
 
+// --- COST & TARIFF CONFIGURATION ---
+
+export interface TariffSegment {
+  startHour: number; // 0-23
+  endHour: number;   // 0-23. If end < start, it implies crossing midnight (e.g. 22:00 - 06:00)
+  rate: number;
+}
+
+export interface ChargingLocation {
+  id: string;
+  name: string; // e.g. "Home", "Office"
+  isFlatRate: boolean;
+  flatRate?: number;
+  timeSlots?: TariffSegment[]; // For TOU
+}
+
 export interface OvmsConfig {
   supabaseUrl: string;
   supabaseKey: string;
@@ -140,8 +155,13 @@ export interface OvmsConfig {
   vehicleName?: string; 
   serverPassword?: string;
   serverUrl?: string;
+  
+  // Deprecated simple cost, used as default fallback
   costPerKwh?: number; 
   currency?: string;
+
+  // New Location-based Pricing
+  locations?: ChargingLocation[];
   
   // AI Configuration
   aiProvider?: 'gemini' | 'openai'; // Selector for AI Provider

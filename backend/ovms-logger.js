@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import mqtt from 'mqtt';
 
 console.log('================================================');
-console.log('   OVMS MATE LOGGER - i3 DRIVE & CHARGE v2.8   ');
+console.log('   OVMS MATE LOGGER - i3 DRIVE & CHARGE v3.0   ');
 console.log('================================================');
 
 const CONFIG = {
@@ -14,6 +14,12 @@ const CONFIG = {
   supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
   supabaseKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_KEY,
   batchInterval: 5000,
+};
+
+// --- LOGGING HELPER ---
+const log = (msg) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${msg}`);
 };
 
 // --- LOGIC CONSTANTS ---
@@ -158,7 +164,7 @@ const processDriveLogic = async () => {
   const isMoving = speed > 0;
   
   if (!activeDrive && isMoving) {
-    console.log(`🚗 Drive Started! Odo: ${currentState.odometer}`);
+    log(`🚗 Drive Started! Odo: ${currentState.odometer}`);
     activeDrive = {
       startTime: now,
       startOdo: currentState.odometer,
@@ -216,7 +222,7 @@ const finalizeDrive = async (drive) => {
 
   const distance = currentState.odometer - drive.startOdo;
   if (distance < MIN_DRIVE_DISTANCE_KM) {
-      console.log(`🗑️ Drive discarded (Distance ${distance.toFixed(2)}km < ${MIN_DRIVE_DISTANCE_KM}km)`);
+      log(`🗑️ Drive discarded (Distance ${distance.toFixed(2)}km < ${MIN_DRIVE_DISTANCE_KM}km)`);
       return;
   }
 
@@ -244,7 +250,7 @@ const finalizeDrive = async (drive) => {
     path: cleanPath
   };
 
-  console.log(`✅ Drive Saved: ${distance.toFixed(1)}km, Duration: ${durationMin.toFixed(1)}min`);
+  log(`✅ Drive Saved: ${distance.toFixed(1)}km, Duration: ${durationMin.toFixed(1)}min`);
   if (supabase) await supabase.from('drives').insert(drivePayload);
 };
 
@@ -253,6 +259,7 @@ const processChargeLogic = async () => {
   if (activeDrive) return; 
 
   const now = Date.now();
+  const rawPower = currentState.power || 0;
   
   // --- Charging Detection Logic ---
   
@@ -264,18 +271,23 @@ const processChargeLogic = async () => {
   const isPlugConnected = plugStatus === true || 
                           (typeof plugStatus === 'string' && plugStatus.toLowerCase().includes('connect'));
   
-  const isI3Charging = isPlugConnected && pilotSignal > 0;
+  // Added check: Power must be negative (drawing > 100W) to consider valid charging start
+  // This prevents ghost sessions when plugged in but charged.
+  const isDrawingPower = rawPower < -0.1;
+
+  const isI3Charging = isPlugConnected && pilotSignal > 0 && isDrawingPower;
 
   // 2. Standard OVMS Signals (v.c.charging / v.c.state)
   const isStandardCharging = currentState.isChargingStandard === true;
   const isStateCharging = currentState.chargeStateStandard === 'charging';
 
   // Combined Condition: Start if any indicator says "Charging"
-  const isCharging = isI3Charging || isStandardCharging || isStateCharging;
+  // Note: We also enforce the power check for standard metrics to be safe against ghost sessions
+  const isCharging = (isI3Charging || isStandardCharging || isStateCharging) && isDrawingPower;
   
   // START
   if (!activeCharge && isCharging) {
-    console.log(`⚡ Charging Started!`);
+    log(`⚡ Charging Started!`);
     
     activeCharge = {
       startTime: now,
@@ -292,7 +304,7 @@ const processChargeLogic = async () => {
 
   // UPDATE
   if (activeCharge) {
-    const rawPower = currentState.power || 0;
+    // Current logic uses positive representation for charts/stats
     const absPower = Math.abs(rawPower);
     
     // Check Stop Conditions requested:
@@ -331,7 +343,7 @@ const processChargeLogic = async () => {
           });
         }
     } else {
-      console.log(`⚡ Charging Stopped. (Reason: Plug:${isPlugConnected}, Pilot:${pilotSignal}, Ready:${currentState.readyToCharge}, Power:${rawPower})`);
+      log(`⚡ Charging Stopped. (Reason: Plug:${isPlugConnected}, Pilot:${pilotSignal}, Ready:${currentState.readyToCharge}, Power:${rawPower})`);
       await finalizeCharge(activeCharge);
       activeCharge = null;
     }
@@ -343,7 +355,7 @@ const finalizeCharge = async (charge) => {
   const durationMin = (endTime - charge.startTime) / 1000 / 60;
   
   if (durationMin < MIN_CHARGE_DURATION_MIN) {
-     console.log(`🗑️ Charge discarded (Duration ${durationMin.toFixed(1)} min < 1 min)`);
+     log(`🗑️ Charge discarded (Duration ${durationMin.toFixed(1)} min < 1 min)`);
      return;
   }
 
@@ -376,7 +388,7 @@ const finalizeCharge = async (charge) => {
     chart_data: charge.chartData
   };
 
-  console.log(`✅ Charge Saved: +${addedKwh.toFixed(2)} kWh`);
+  log(`✅ Charge Saved: +${addedKwh.toFixed(2)} kWh`);
   if (supabase) await supabase.from('charges').insert(payload);
 };
 
@@ -443,7 +455,7 @@ setInterval(async () => {
 }, CONFIG.batchInterval);
 
 client.on('connect', () => {
-  console.log('🔌 MQTT Connected');
+  log('🔌 MQTT Connected');
   // Subscribe to Metrics
   client.subscribe(`ovms/${CONFIG.mqttUser}/${CONFIG.vehicleId}/metric/#`);
 });
