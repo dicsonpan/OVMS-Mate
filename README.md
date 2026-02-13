@@ -38,7 +38,8 @@ It is specifically optimized for the **BMW i3** (using specific PIDs/Metrics) bu
     *   Elevation & Speed Charts
     *   Total Consumption
     *   GPS Path on Map
-*   **Charging Analytics**: detailed charging sessions with power curves (kW), SoC gain, and cost calculations.
+*   **Smart Cost Tracking**: Define custom electricity tariffs for specific locations (e.g., "Home", "Work"). Supports **Time-of-Use (TOU)** pricing (Peak/Off-Peak rates) for accurate charging cost calculations.
+*   **Charging Analytics**: detailed charging sessions with power curves (kW), SoC gain, and precise cost breakdown.
 *   **Real-time Dashboard**: Live status of SoC, Range, Speed, Power, and Battery/Motor temperatures.
 *   **AI Insights (Experimental)**: Integrated **Google Gemini AI** to analyze your drive efficiency and provide driving tips.
 
