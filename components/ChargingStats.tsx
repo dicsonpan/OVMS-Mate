@@ -9,62 +9,59 @@ interface ChargingStatsProps {
   config: OvmsConfig;
 }
 
-const PAGE_SIZE = 10;
-
 const ChargingStats: React.FC<ChargingStatsProps> = ({ config }) => {
+  const getToday = () => new Date().toISOString().split('T')[0];
+  const getFirstDayOfMonth = () => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().split('T')[0];
+  };
+  const getMonthsAgo = (months: number) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - months);
+    return d.toISOString().split('T')[0];
+  };
+
   const [charges, setCharges] = useState<ChargeSession[]>([]);
   const [loading, setLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(0);
 
   // Filter States
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(getFirstDayOfMonth());
+  const [endDate, setEndDate] = useState(getToday());
 
   // Initial Load
   useEffect(() => {
-    loadCharges(true);
+    loadCharges(startDate, endDate);
   }, []);
 
-  const loadCharges = async (reset = false) => {
+  const loadCharges = async (start: string, end: string) => {
     setLoading(true);
-    const currentPage = reset ? 0 : page;
-    const currentOffset = currentPage * PAGE_SIZE;
-
     const newCharges = await fetchCharges({
-      limit: PAGE_SIZE,
-      offset: currentOffset,
-      startDate: startDate || undefined,
-      endDate: endDate || undefined
+      limit: 10000,
+      offset: 0,
+      startDate: start || undefined,
+      endDate: end || undefined
     });
-
-    if (reset) {
-      setCharges(newCharges);
-      setPage(1);
-    } else {
-      setCharges(prev => [...prev, ...newCharges]);
-      setPage(prev => prev + 1);
-    }
-
-    if (newCharges.length < PAGE_SIZE) setHasMore(false);
-    else setHasMore(true);
-    
+    setCharges(newCharges);
     setLoading(false);
   };
 
-  const handleFilter = () => loadCharges(true);
-  const handleReset = () => {
-    setStartDate('');
-    setEndDate('');
-    setTimeout(() => {
-        setLoading(true);
-        fetchCharges({ limit: PAGE_SIZE, offset: 0 }).then(data => {
-            setCharges(data);
-            setPage(1);
-            setHasMore(data.length >= PAGE_SIZE);
-            setLoading(false);
-        });
-    }, 0);
+  const handleFilter = () => loadCharges(startDate, endDate);
+
+  const setPreset = (months: number) => {
+    const start = getMonthsAgo(months);
+    const end = getToday();
+    setStartDate(start);
+    setEndDate(end);
+    loadCharges(start, end);
+  };
+
+  const setThisMonth = () => {
+    const start = getFirstDayOfMonth();
+    const end = getToday();
+    setStartDate(start);
+    setEndDate(end);
+    loadCharges(start, end);
   };
 
   // --- Calculations ---
@@ -128,39 +125,37 @@ const ChargingStats: React.FC<ChargingStatsProps> = ({ config }) => {
       </div>
 
       {/* FILTER BAR */}
-      <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800 flex flex-wrap gap-2 items-center justify-between">
-         <div className="flex gap-2 items-center flex-1">
-             <input 
-                type="date" 
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500 w-full"
-                placeholder="Start Date"
-             />
-             <span className="text-slate-500">-</span>
-             <input 
-                type="date" 
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500 w-full"
-                placeholder="End Date"
-             />
+      <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800 flex flex-col gap-3">
+         <div className="flex flex-wrap gap-2">
+            <button onClick={setThisMonth} className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">本月</button>
+            <button onClick={() => setPreset(3)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">近三月</button>
+            <button onClick={() => setPreset(6)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">近半年</button>
+            <button onClick={() => setPreset(12)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">近一年</button>
          </div>
-         <div className="flex gap-2">
-            <button 
-                onClick={handleFilter}
-                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-            >
-                Filter
-            </button>
-            {(startDate || endDate) && (
-                <button 
-                    onClick={handleReset}
-                    className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                >
-                    Reset
-                </button>
-            )}
+         <div className="flex gap-2 items-center justify-between">
+             <div className="flex gap-2 items-center flex-1">
+                 <input 
+                    type="date" 
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500 w-full"
+                    placeholder="Start Date"
+                 />
+                 <span className="text-slate-500">-</span>
+                 <input 
+                    type="date" 
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500 w-full"
+                    placeholder="End Date"
+                 />
+             </div>
+             <button 
+                 onClick={handleFilter}
+                 className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors"
+             >
+                 Filter
+             </button>
          </div>
       </div>
 
@@ -180,18 +175,7 @@ const ChargingStats: React.FC<ChargingStatsProps> = ({ config }) => {
         <ChargeCard key={charge.id} charge={charge} config={config} formatCurrency={formatCurrency} />
       ))}
 
-      {/* PAGINATION */}
-      {hasMore && (
-        <div className="pt-4 text-center">
-            <button 
-                onClick={() => loadCharges()}
-                disabled={loading}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold py-3 px-8 rounded-full transition-colors disabled:opacity-50"
-            >
-                {loading ? 'Loading...' : 'Load More'}
-            </button>
-        </div>
-      )}
+
     </div>
   );
 };
