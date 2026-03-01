@@ -13,14 +13,24 @@ interface DriveListProps {
 const PAGE_SIZE = 10;
 
 const DriveList: React.FC<DriveListProps> = ({ onViewMap }) => {
+  const getToday = () => new Date().toISOString().split('T')[0];
+  const getFirstDayOfMonth = () => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().split('T')[0];
+  };
+  const getMonthsAgo = (months: number) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - months);
+    return d.toISOString().split('T')[0];
+  };
+
   const [drives, setDrives] = useState<DriveSession[]>([]);
   const [loading, setLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(0);
   
   // Filter States
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(getFirstDayOfMonth());
+  const [endDate, setEndDate] = useState(getToday());
 
   // Analysis States
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
@@ -28,58 +38,39 @@ const DriveList: React.FC<DriveListProps> = ({ onViewMap }) => {
 
   // Initial Load
   useEffect(() => {
-    loadDrives(true);
+    loadDrives(startDate, endDate);
   }, []);
 
-  const loadDrives = async (reset = false) => {
+  const loadDrives = async (start: string, end: string) => {
     setLoading(true);
-    const currentPage = reset ? 0 : page;
-    const currentOffset = currentPage * PAGE_SIZE;
-
     const newDrives = await fetchDrives({
-      limit: PAGE_SIZE,
-      offset: currentOffset,
-      startDate: startDate || undefined,
-      endDate: endDate || undefined
+      limit: 10000,
+      offset: 0,
+      startDate: start || undefined,
+      endDate: end || undefined
     });
-
-    if (reset) {
-      setDrives(newDrives);
-      setPage(1);
-    } else {
-      setDrives(prev => [...prev, ...newDrives]);
-      setPage(prev => prev + 1);
-    }
-
-    if (newDrives.length < PAGE_SIZE) {
-      setHasMore(false);
-    } else {
-      setHasMore(true);
-    }
+    setDrives(newDrives);
     setLoading(false);
   };
 
   const handleFilter = () => {
-    loadDrives(true);
+    loadDrives(startDate, endDate);
   };
 
-  const handleReset = () => {
-    setStartDate('');
-    setEndDate('');
-    // We need to trigger loadDrives after state update, but state update is async.
-    // simpler to just call fetch with empty params directly here or use effect dependency (but that triggers on every keystroke)
-    // Let's force a reload with empty params
-    setTimeout(() => {
-        // Hacky way to ensure state is cleared for the fetch, 
-        // essentially we just want to reload without filters.
-        setLoading(true);
-        fetchDrives({ limit: PAGE_SIZE, offset: 0 }).then(data => {
-            setDrives(data);
-            setPage(1);
-            setHasMore(data.length >= PAGE_SIZE);
-            setLoading(false);
-        });
-    }, 0);
+  const setPreset = (months: number) => {
+    const start = getMonthsAgo(months);
+    const end = getToday();
+    setStartDate(start);
+    setEndDate(end);
+    loadDrives(start, end);
+  };
+
+  const setThisMonth = () => {
+    const start = getFirstDayOfMonth();
+    const end = getToday();
+    setStartDate(start);
+    setEndDate(end);
+    loadDrives(start, end);
   };
 
   const handleAnalyze = async (drive: DriveSession) => {
@@ -146,39 +137,37 @@ const DriveList: React.FC<DriveListProps> = ({ onViewMap }) => {
       </div>
 
       {/* FILTER BAR */}
-      <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800 flex flex-wrap gap-2 items-center justify-between">
-         <div className="flex gap-2 items-center flex-1">
-             <input 
-                type="date" 
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500 w-full"
-                placeholder="Start Date"
-             />
-             <span className="text-slate-500">-</span>
-             <input 
-                type="date" 
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500 w-full"
-                placeholder="End Date"
-             />
+      <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800 flex flex-col gap-3">
+         <div className="flex flex-wrap gap-2">
+            <button onClick={setThisMonth} className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">本月</button>
+            <button onClick={() => setPreset(3)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">近三月</button>
+            <button onClick={() => setPreset(6)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">近半年</button>
+            <button onClick={() => setPreset(12)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">近一年</button>
          </div>
-         <div className="flex gap-2">
-            <button 
-                onClick={handleFilter}
-                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-            >
-                Filter
-            </button>
-            {(startDate || endDate) && (
-                <button 
-                    onClick={handleReset}
-                    className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                >
-                    Reset
-                </button>
-            )}
+         <div className="flex gap-2 items-center justify-between">
+             <div className="flex gap-2 items-center flex-1">
+                 <input 
+                    type="date" 
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500 w-full"
+                    placeholder="Start Date"
+                 />
+                 <span className="text-slate-500">-</span>
+                 <input 
+                    type="date" 
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500 w-full"
+                    placeholder="End Date"
+                 />
+             </div>
+             <button 
+                 onClick={handleFilter}
+                 className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors"
+             >
+                 Filter
+             </button>
          </div>
       </div>
 
@@ -339,18 +328,7 @@ const DriveList: React.FC<DriveListProps> = ({ onViewMap }) => {
         </div>
       ))}
 
-      {/* PAGINATION */}
-      {hasMore && (
-        <div className="pt-4 text-center">
-            <button 
-                onClick={() => loadDrives()}
-                disabled={loading}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold py-3 px-8 rounded-full transition-colors disabled:opacity-50"
-            >
-                {loading ? 'Loading...' : 'Load More Drives'}
-            </button>
-        </div>
-      )}
+
     </div>
   );
 };
